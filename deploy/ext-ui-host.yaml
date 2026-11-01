@@ -1,0 +1,111 @@
+# The pod, in its namespace.
+#
+# IT REPLACES THE CONSOLE'S DEPLOYMENT, not sits beside it: this process serves the console itself, and
+# two pods on one hostname would be two different consoles depending on which answered.
+#
+# WHAT IT NEEDS FROM THE CLUSTER:
+#   - the agent's Service, for /agent.v1.*
+#   - each extension's Service (`<id>-ext`), for /ext/<id>/api/*
+#   - a volume at /data, because the installed panels are the only state
+#   - egress to github.com, to install from a release
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ext-ui-host-data
+  namespace: dev
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: workspace-local
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ext-ui-host
+  namespace: dev
+type: Opaque
+stringData:
+  # Installing a panel writes the files the console then executes at its own origin, so this is a
+  # real credential. The service logs a warning when it is empty.
+  admin-token: REPLACE_ME
+  # Optional: raises the GitHub rate limit, and is REQUIRED when a panel is published from a private
+  # repository.
+  github-token: ''
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ext-ui-host
+  namespace: dev
+  labels: { app: ext-ui-host }
+spec:
+  replicas: 1
+  # THE PANELS LIVE ON A ReadWriteOnce VOLUME, so two replicas could not both mount it — and a rolling
+  # update would try to. Recreate is what this StatefulSet-shaped constraint requires of a Deployment.
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: { app: ext-ui-host }
+  template:
+    metadata:
+      labels: { app: ext-ui-host }
+    spec:
+      containers:
+        - name: ext-ui-host
+          image: ghcr.io/easydev-org/easyagent-ext-ui-host:v0.1.0
+          ports:
+            - { name: http, containerPort: 8080 }
+          env:
+            - { name: PORT, value: '8080' }
+            - { name: UI_DATA_DIR, value: /data }
+            - { name: CONSOLE_DIR, value: /srv }
+            # WHERE THE CONSOLE'S OWN RPC GOES. Unset means the console loads and every call 404s,
+            # which the service warns about rather than hiding.
+            - { name: AGENT_UPSTREAM, value: agent.dev.svc.cluster.local:80 }
+            - { name: EXT_SVC_SUFFIX, value: .dev.svc.cluster.local }
+            - name: ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef: { name: ext-ui-host, key: admin-token }
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef: { name: ext-ui-host, key: github-token, optional: true }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            # THE ROOT FILESYSTEM IS READ-ONLY, and an install stages its work in a temporary
+            # directory. Without this mount the first install fails with "read-only file system" —
+            # from a directory nobody chose, which is why it is named here rather than left to /tmp
+            # being writable by luck.
+            - { name: tmp, mountPath: /tmp }
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: '1', memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 65532
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: ext-ui-host-data }
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ext-ui-host
+  namespace: dev
+spec:
+  selector: { app: ext-ui-host }
+  ports:
+    - { name: http, port: 80, targetPort: http }

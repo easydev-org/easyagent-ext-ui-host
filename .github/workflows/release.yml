@@ -1,0 +1,76 @@
+name: release
+
+# Publishes the pod's image on a tag.
+#
+# THE CONSOLE'S TAG IS AN INPUT, not a constant in the Dockerfile. The pod embeds the console from
+# that image, so "which console does this pod serve" is a fact about a release, and pinning it in a
+# file would mean a commit to change a version — which is the kind of commit that gets made by hand at
+# an awkward moment and never recorded anywhere.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      console_tag:
+        description: 'The console image tag to embed (e.g. 0.5.1)'
+        required: true
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  image:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # THE CONSOLE VERSION COMES FROM THE TAG THIS POD IS BEING RELEASED AS, when it can.
+      #
+      # A tag like v0.3.0-console-0.5.1 is too clever to ask of anybody; instead the console tag is a
+      # workflow input, and the default below is the one this release was tested against. A build that
+      # silently took `latest` would produce an image whose console version nobody can name.
+      - name: which console
+        id: console
+        run: |
+          set -euo pipefail
+          tag="${{ github.event.inputs.console_tag }}"
+          if [ -z "$tag" ]; then
+            tag=$(grep -oP 'ARG CONSOLE_IMAGE=\K[^ ]*' Dockerfile | sed 's/.*://')
+            echo "::warning::no console_tag input; using the Dockerfile's default ($tag)"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "embedding the console from easyagent-webui:$tag"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/easydev-org/easyagent-ext-ui-host:${{ github.ref_name }}
+            ${{ env.REGISTRY }}/easydev-org/easyagent-ext-ui-host:latest
+          build-args: |
+            CONSOLE_IMAGE=${{ env.REGISTRY }}/easydev-org/easyagent-webui:${{ steps.console.outputs.tag }}
+
+      # THE IMAGE MUST CONTAIN THE CONSOLE. `COPY --from=console /srv` of a wrong path produces an
+      # image that builds, starts, and then exits on its own guard — which is a deploy-time failure
+      # nobody asked for. Checking here puts it at build time, where the message can name the cause.
+      - name: the console is inside the image
+        run: |
+          set -euo pipefail
+          img="${{ env.REGISTRY }}/easydev-org/easyagent-ext-ui-host:${{ github.ref_name }}"
+          docker run --rm --entrypoint sh "$img" -c '
+            set -e
+            test -f /srv/index.html || { echo "FATAL: /srv/index.html is missing"; ls /srv || true; exit 1; }
+            echo "console bundle: $(find /srv -type f | wc -l) files"
+            /app/ext-ui-host --help 2>/dev/null || true
+          '
