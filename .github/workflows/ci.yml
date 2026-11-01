@@ -78,13 +78,15 @@ jobs:
             sleep 1
           done
 
-          # A STATUS CODE FROM wget IS NOT "the last HTTP line". wget prints redirects and retries too,
-          # and `tail -1` on that picked the wrong line — the check reported "expected 404, got 404",
-          # which is the kind of message that makes a reader distrust every other assertion here.
+          # A STATUS CODE FROM wget NEEDS TWO THINGS SAID EXPLICITLY.
           #
-          # ONE HELPER, used everywhere below.
+          # 1. `|| true`. wget EXITS NON-ZERO for a 4xx, and under `set -e` that ends the script —
+          #    silently, because the whole thing is inside a command substitution. The run then
+          #    reports a failure whose log contains nothing but the script text, which reads as a
+          #    broken workflow rather than a wget exit code.
+          # 2. The LAST status line, not the first: wget prints one per attempt.
           codeof() {
-            wget -q -S -O /dev/null "$@" 2>&1 | awk '/^ *HTTP\//{c=$2} END{print c+0}'
+            { wget -q -S -O /dev/null "$@" 2>&1 || true; } | awk '/^ *HTTP\//{c=$2} END{print c+0}'
           }
 
           # Nothing installed yet: the discovery probe must 404, not answer an empty panel. The console
@@ -93,12 +95,18 @@ jobs:
           test "$code" = "404" || { echo "::error::expected 404 before install, got $code"; exit 1; }
 
           echo "--- installing ---"
-          wget -q -O /tmp/install.json \
+          # NO `--quiet` HERE, and the exit code is checked. A failing install whose only evidence is
+          # a missing file is the worst kind of CI failure: the log shows the command, not the reason.
+          if ! wget -O /tmp/install.json \
             --header='Content-Type: application/json' \
             --header='Connect-Protocol-Version: 1' \
             --header='Authorization: Bearer ci-token' \
             --post-data='{"extId":"gitdev","repo":"easydev-org/easyagent-gitdev-ext-ui","version":"latest"}' \
-            "http://127.0.0.1:$PORT/admin/ui.v1.UiHostService/Install"
+            "http://127.0.0.1:$PORT/admin/ui.v1.UiHostService/Install"; then
+            echo "::error::the install request failed"
+            cat /tmp/install.json 2>/dev/null || true
+            exit 1
+          fi
           cat /tmp/install.json
 
           # INSTALLING MUST NOT SERVE. The whole point of separating install from activate is that a
@@ -108,12 +116,16 @@ jobs:
 
           echo "--- activating ---"
           V=$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' /tmp/install.json)
-          wget -q -O /dev/null \
+          test -n "$V" || { echo "::error::the install response has no version"; cat /tmp/install.json; exit 1; }
+          if ! wget -O /dev/null \
             --header='Content-Type: application/json' \
             --header='Connect-Protocol-Version: 1' \
             --header='Authorization: Bearer ci-token' \
             --post-data="{\"extId\":\"gitdev\",\"version\":\"$V\"}" \
-            "http://127.0.0.1:$PORT/admin/ui.v1.UiHostService/Activate"
+            "http://127.0.0.1:$PORT/admin/ui.v1.UiHostService/Activate"; then
+            echo "::error::the activate request failed"
+            exit 1
+          fi
 
           echo "--- the panel answers ---"
           wget -q -O /tmp/info.json "http://127.0.0.1:$PORT/ext/gitdev/api/v1/ui"
