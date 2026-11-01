@@ -37,6 +37,13 @@ func main() {
 	// the extension instead; keeping it one constant means the two rules cannot drift apart.
 	base := envOr("UI_BASE", "/ext")
 	ghToken := os.Getenv("GITHUB_TOKEN")
+	// WHERE THE CONSOLE'S OWN RPC GOES. This pod serves the console, so it also has to forward the
+	// console's API — otherwise the page loads and every call 404s.
+	agentURL := os.Getenv("AGENT_UPSTREAM")
+	// The DNS suffix an extension Service lives under. In-cluster default; override for a laptop.
+	extSuffix := envOr("EXT_SVC_SUFFIX", ".dev.svc.cluster.local")
+	// The console bundle, baked into the image at build time.
+	consoleDir := envOr("CONSOLE_DIR", "/srv")
 
 	if _, err := os.Stat(dataDir); err != nil {
 		// A missing data directory is fatal, not a directory to create on demand: it means the volume
@@ -52,6 +59,18 @@ func main() {
 		Source: &store.GitHubReleases{Token: ghToken},
 	}
 	svc := &host.Service{Store: st, Installer: inst}
+	panels := &host.Panels{Store: st}
+
+	if _, err := os.Stat(consoleDir + "/index.html"); err != nil {
+		// THE CONSOLE IS THE POINT OF THIS POD, so a missing bundle is fatal. Starting anyway would
+		// serve panels at /ext/ and a 404 at /, which looks like a routing bug rather than a build
+		// that did not copy the files.
+		log.Error("the console bundle is missing", "dir", consoleDir, "err", err)
+		os.Exit(1)
+	}
+	if agentURL == "" {
+		log.Warn("AGENT_UPSTREAM is not set: the console will load but every API call will 404")
+	}
 
 	mux := http.NewServeMux()
 
@@ -61,7 +80,10 @@ func main() {
 	mountAdmin(mux, svc, os.Getenv("ADMIN_TOKEN"), log)
 
 	// THE PANELS.
-	host.Mount(mux, st, base)
+	app := &host.App{Dir: consoleDir, AgentURL: agentURL, ExtSuffix: extSuffix}
+	app.Mount(mux, panels)
+
+	_ = base // the mount is /ext by construction; kept for the log line below
 
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -79,7 +101,8 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	go func() {
-		log.Info("listening", "port", port, "base", base, "data", dataDir)
+		log.Info("listening", "port", port, "base", base, "data", dataDir,
+			"console", consoleDir, "agent", agentURL, "extSuffix", extSuffix)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error("serve", "err", err)
 			stop()

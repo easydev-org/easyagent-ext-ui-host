@@ -46,11 +46,15 @@ jobs:
           # reproducible from the .proto alone rather than hand-edited.
           echo "regeneration succeeded"
 
-  # The service, against a REAL GitHub release.
+  # The pod, against a REAL GitHub release and a REAL upstream.
   #
   # THE INSTALLER IS THE PART THAT CANNOT BE TESTED WITH A FAKE. It fetches a tarball over HTTP,
   # unpacks it, and writes to disk — and every one of those steps has a failure mode a unit test with a
-  # stub source never reaches. This job installs the panel that actually exists, then serves it.
+  # stub source never reaches.
+  #
+  # THE ROUTING IS THE OTHER PART. This pod answers on ONE port for four different owners — the
+  # console, the agent, the extensions, and the panels — and getting that split wrong produces a page
+  # that loads and does nothing, which no unit test of any single handler would notice.
   live:
     runs-on: ubuntu-latest
     steps:
@@ -59,19 +63,66 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # A STAND-IN AGENT and a STAND-IN CONSOLE, so this job needs neither the real agent nor the
+      # real webui image. What is under test is this pod's behaviour: whether it proxies, whether it
+      # serves, and whether it says so when it has nothing.
       - name: build
-        run: go build -o /tmp/ext-ui-host ./cmd/ext-ui-host
+        run: |
+          set -euo pipefail
+          go build -o /tmp/ext-ui-host ./cmd/ext-ui-host
+          mkdir -p /tmp/srv
+          printf '<!doctype html><html>CONSOLE</html>' > /tmp/srv/index.html
+          mkdir -p /tmp/srv/assets
+          printf 'console.log(1)' > /tmp/srv/assets/app.js
 
-      - name: install a real panel, serve it, then remove it
+          # THE STAND-IN UPSTREAM, WRITTEN AS A TEST PROGRAM.
+          #
+          # `python3 -m http.server` was the first attempt and it cannot serve this: it maps the URL to
+          # a FILE, and `/agent.v1.AgentService/ListSessions` is not one, so it answered 404 with its
+          # own HTML. A 404 from the wrong origin looks exactly like a proxy that did not fire, and the
+          # check would have had to accept either — which is no check at all.
+          #
+          # This one answers EVERY path with the same JSON, so "did the request reach the upstream" is
+          # a question with one answer: is the body that JSON or is it the console's HTML.
+          mkdir -p /tmp/upstream
+          cat > /tmp/upstream/main.go <<'EOF'
+          package main
+
+          import (
+          	"net/http"
+          	"os"
+          )
+
+          func main() {
+          	mux := http.NewServeMux()
+          	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+          		w.Header().Set("Content-Type", "application/json")
+          		_, _ = w.Write([]byte(`{"from":"upstream","path":"` + r.URL.Path + `"}`))
+          	})
+          	_ = http.ListenAndServe(os.Args[1], mux)
+          }
+          EOF
+          ( cd /tmp/upstream && go mod init upstream >/dev/null 2>&1 && go build -o /tmp/upstream-server . )
+
+      - name: one pod, four owners
         env:
           DATA: /tmp/uidata
           PORT: '18099'
         run: |
           set -euo pipefail
           mkdir -p "$DATA"
-          UI_DATA_DIR="$DATA" PORT="$PORT" ADMIN_TOKEN=ci-token /tmp/ext-ui-host &
+
+          /tmp/upstream-server 127.0.0.1:18098 &
+          UP=$!
+          trap 'kill $UP $SRV 2>/dev/null || true' EXIT
+
+          # NO EXT_SVC_SUFFIX OVERRIDE: the extension-API route points at a host that cannot resolve,
+          # and that is the point — what matters is that the request LEFT this process instead of
+          # being answered by the panel or the console.
+          UI_DATA_DIR="$DATA" CONSOLE_DIR=/tmp/srv PORT="$PORT" ADMIN_TOKEN=ci-token \
+            AGENT_UPSTREAM=127.0.0.1:18098 EXT_SVC_SUFFIX=.invalid \
+            /tmp/ext-ui-host &
           SRV=$!
-          trap 'kill $SRV 2>/dev/null || true' EXIT
 
           for i in $(seq 1 30); do
             if wget -q -O- "http://127.0.0.1:$PORT/healthz" >/dev/null 2>&1; then break; fi
@@ -89,6 +140,38 @@ jobs:
             { wget -q -S -O /dev/null "$@" 2>&1 || true; } | awk '/^ *HTTP\//{c=$2} END{print c+0}'
           }
 
+          echo "=== the console ==="
+          wget -q -O /tmp/x.html "http://127.0.0.1:$PORT/"
+          grep -q CONSOLE /tmp/x.html || { echo "::error::the console did not serve"; exit 1; }
+          wget -q -O /tmp/x.html "http://127.0.0.1:$PORT/some/route"
+          grep -q CONSOLE /tmp/x.html || { echo "::error::the SPA fallback did not work"; exit 1; }
+          # A MISSING ASSET IS NOT THE APP: answering a .js request with HTML makes the browser fail
+          # to parse it, and the page loads looking broken with nothing naming the file.
+          code=$(codeof "http://127.0.0.1:$PORT/assets/missing.js")
+          test "$code" = "404" || { echo "::error::a missing console asset must 404, got $code"; exit 1; }
+
+          echo "=== the agent, over the same port ==="
+          # THE ROUTE THAT REGRESSED ONCE. `/agent.v1.X/Method` cannot be a ServeMux pattern — the
+          # separator is a DOT — and when it fell through, the console answered its own RPC with
+          # index.html. A browser reports that as a JSON parse error naming no URL.
+          wget -q -O /tmp/agent.json "http://127.0.0.1:$PORT/agent.v1.AgentService/ListSessions" || true
+          grep -q '"from":"upstream"' /tmp/agent.json || {
+            echo "::error::the agent RPC did not reach the upstream — it fell through to the console"
+            cat /tmp/agent.json; exit 1; }
+          # AND THE PATH IS NOT REWRITTEN: the agent routes on it.
+          grep -q '/agent.v1.AgentService/ListSessions' /tmp/agent.json || {
+            echo "::error::the proxy changed the path"; cat /tmp/agent.json; exit 1; }
+          echo "the agent RPC reached its upstream"
+
+          echo "=== an extension's API leaves this process ==="
+          # The suffix points at a host that cannot resolve, so this cannot succeed — what is asserted
+          # is that it is NOT the console and NOT the panel.
+          wget -q -O /tmp/extapi.txt "http://127.0.0.1:$PORT/ext/gitdev/api/v1/whoami" || true
+          if grep -q CONSOLE /tmp/extapi.txt; then
+            echo "::error::an extension API call fell through to the console"; exit 1
+          fi
+
+          echo "=== nothing installed: say so ==="
           # Nothing installed yet: the discovery probe must 404, not answer an empty panel. The console
           # reads a non-200 as "no UI" and leaves the extension out of its shelf.
           code=$(codeof "http://127.0.0.1:$PORT/ext/gitdev/api/v1/ui")
@@ -127,10 +210,15 @@ jobs:
             exit 1
           fi
 
-          echo "--- the panel answers ---"
+          echo "=== the panel answers, on the same origin as the console ==="
           wget -q -O /tmp/info.json "http://127.0.0.1:$PORT/ext/gitdev/api/v1/ui"
           cat /tmp/info.json
           grep -q '"base"' /tmp/info.json || { echo "::error::the discovery answer has no base"; exit 1; }
+          # THE PANEL'S METADATA IS ITS OWN. Before ui.json shipped in the bundle, the console showed
+          # the extension's backend-declared title — and a wording change needed a backend deploy.
+          grep -q '"descriptions"' /tmp/info.json || {
+            echo "::error::the discovery answer has no descriptions — ui.json did not reach the bundle"
+            exit 1; }
 
           wget -q -O /tmp/index.html "http://127.0.0.1:$PORT/ext/gitdev/"
           grep -qi '<html' /tmp/index.html || { echo "::error::the bundle did not serve index.html"; exit 1; }
@@ -148,5 +236,9 @@ jobs:
             --post-data="{\"extId\":\"gitdev\",\"version\":\"$V\"}" \
             "http://127.0.0.1:$PORT/admin/ui.v1.UiHostService/Remove")
           test "$code" = "400" || { echo "::error::removing the serving version must be refused, got $code"; exit 1; }
+
+          # AND THE CONSOLE STILL WORKS WITH A PANEL INSTALLED — the two share a port and a router.
+          wget -q -O /tmp/x.html "http://127.0.0.1:$PORT/"
+          grep -q CONSOLE /tmp/x.html || { echo "::error::the console stopped serving once a panel was active"; exit 1; }
 
           echo "all live checks passed"
