@@ -1,7 +1,13 @@
 # The pod, in its namespace.
 #
-# IT REPLACES THE CONSOLE'S DEPLOYMENT, not sits beside it: this process serves the console itself, and
-# two pods on one hostname would be two different consoles depending on which answered.
+# IT REPLACES THE CONSOLE, AND KEEPS THE CONSOLE'S ADDRESS. The Deployment is named `webui` and selects
+# `app: webui`, and the Service is named `webui` — exactly what the old console deployment used. So
+# webui.<ns>.svc.cluster.local keeps resolving, the ingress rule keeps working, and no caller learns a
+# new name for a change that is supposed to be invisible from outside.
+#
+# TWO PODS WOULD BE TWO CONSOLES, which is why the name moves rather than being added to: leaving both
+# would make webui.<ns> resolve to whichever was ready, and a reader would get one console or the other
+# depending on the day.
 #
 # WHAT IT NEEDS FROM THE CLUSTER:
 #   - the agent's Service, for /agent.v1.*
@@ -37,23 +43,27 @@ stringData:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ext-ui-host
+  # NAMED `webui`, NOT `ext-ui-host`: this deployment replaces the console, and a different name would
+  # leave the old one and this one both claiming the same Service.
+  name: webui
   namespace: dev
-  labels: { app: ext-ui-host }
+  labels: { app: webui }
 spec:
   replicas: 1
   # THE PANELS LIVE ON A ReadWriteOnce VOLUME, so two replicas could not both mount it — and a rolling
   # update would try to. Recreate is what this StatefulSet-shaped constraint requires of a Deployment.
   strategy: { type: Recreate }
   selector:
-    matchLabels: { app: ext-ui-host }
+    matchLabels: { app: webui }
   template:
     metadata:
-      labels: { app: ext-ui-host }
+      # THE SELECTOR THE EXISTING SERVICE ALREADY USES — keeping it is what makes the address
+      # survive this change.
+      labels: { app: webui }
     spec:
       containers:
-        - name: ext-ui-host
-          image: ghcr.io/easydev-org/easyagent-ext-ui-host:v0.1.0
+        - name: webui
+          image: ghcr.io/easydev-org/easyagent-ext-ui-host:v0.1.1
           ports:
             - { name: http, containerPort: 8080 }
           env:
@@ -103,9 +113,12 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: ext-ui-host
+  # THE CONSOLE'S EXISTING NAME AND PORT. webui.<ns>.svc.cluster.local:80 is what the ingress and every
+  # in-cluster caller already use; renaming it would turn "one pod instead of two" into an outage with
+  # a new DNS name to chase.
+  name: webui
   namespace: dev
 spec:
-  selector: { app: ext-ui-host }
+  selector: { app: webui }
   ports:
     - { name: http, port: 80, targetPort: http }
