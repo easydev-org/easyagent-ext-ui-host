@@ -85,7 +85,21 @@ func (a *App) Mount(mux *http.ServeMux, panels *Panels) {
 			panels.Serve(w, r)
 			return
 		}
-		if !strings.HasPrefix(tail, "api/") {
+		// A SECOND PREFIX THE EXTENSION OWNS: the live screen.
+		//
+		// `/ext/<id>/desktop/...` is a WebSocket-carrying proxy the extension serves — the easystream
+		// UI, for the sandboxes that have one. Without this line it fell into the panel's SPA fallback,
+		// so the iframe loaded THE PANEL'S OWN index.html inside itself: a page that renders, looks
+		// plausible, and shows no screen. The signed URL in it was never even read.
+		//
+		// The prefix is the extension's to know, which is why it is named here rather than guessed:
+		// a rule that forwarded "everything that is not api/" would send the panel's own routes to
+		// a backend that has no idea what they are.
+		// `tail == "desktop"` as well as the subtree: the first request a browser makes for a screen is
+		// the bare path, and a rule that only matched `desktop/` would hand that one request to the
+		// panel and the rest to the extension.
+		if !strings.HasPrefix(tail, "api/") &&
+			tail != "desktop" && !strings.HasPrefix(tail, "desktop/") {
 			panels.Serve(w, r)
 			return
 		}

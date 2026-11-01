@@ -128,3 +128,49 @@ func TestPanelsWithoutAnInstallSaySo(t *testing.T) {
 		t.Fatal("a panel request fell through to the console")
 	}
 }
+
+/**
+ * THE PATHS AN EXTENSION OWNS BEYOND ITS API.
+ *
+ * `/ext/<id>/desktop/...` is the live screen: a WebSocket-carrying proxy the extension serves. It is
+ * NOT under `/api/`, so a rule of "anything not api/ is the panel" handed it to the SPA fallback — and
+ * the iframe loaded THE PANEL'S OWN index.html inside itself. A page that renders, looks plausible,
+ * and shows no screen, with the signed URL in it never read.
+ *
+ * The failure is invisible without this test: everything answers 200 either way.
+ */
+func TestDesktopIsForwardedNotServedAsThePanel(t *testing.T) {
+	// A stand-in extension that marks anything it receives, so "did the request leave this process" is
+	// a question with one answer.
+	ext := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("EXTENSION-SAW:" + r.URL.Path))
+	}))
+	defer ext.Close()
+
+	// THE SUFFIX IS THE TEST SERVER'S HOST, so <id>-ext.<suffix> resolves to it for any id.
+	std := &store.Store{Root: t.TempDir()}
+	panels := &Panels{Store: std}
+	app := &App{
+		Dir:       consoleFixture(t),
+		ExtSuffix: "." + ext.Listener.Addr().String(),
+	}
+	mux := http.NewServeMux()
+	app.Mount(mux, panels)
+
+	for _, p := range []string{
+		"/ext/sandbox/desktop",
+		"/ext/sandbox/desktop/labwc",
+		"/ext/sandbox/desktop/labwc/",
+		"/ext/sandbox/desktop/labwc/est/ws",
+	} {
+		w := do(mux, http.MethodGet, p)
+		body := w.Body.String()
+		if strings.Contains(body, "CONSOLE") {
+			t.Fatalf("%s fell through to the console", p)
+		}
+		// The panel's own page is what a reader saw instead of a screen; assert it is not that either.
+		if strings.Contains(body, "<html") {
+			t.Fatalf("%s was answered with an HTML page rather than forwarded", p)
+		}
+	}
+}
