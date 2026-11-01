@@ -1,0 +1,127 @@
+// Installing and serving extension panels.
+//
+// ONE SERVICE FOR BOTH, because they are one job: a panel that is installed but not discovered is
+// invisible, and a panel that is discovered but not installed is a broken card in the console's shelf.
+// Splitting them would mean two places to look when a panel does not appear.
+syntax = "proto3";
+
+package ui.v1;
+
+option go_package = "github.com/easydev-org/easyagent-ext-ui-host/gen/ui/v1;uiv1";
+
+service UiHostService {
+  // Install downloads a panel from a release and makes it available.
+  //
+  // IT DOES NOT SWITCH VERSIONS. Installing v0.2.0 while v0.1.0 is serving leaves v0.1.0 serving:
+  // the new version lands in its own directory, and Activate is what changes what browsers get. That
+  // separation is what makes an install safe to attempt — a broken package can be installed, looked
+  // at, and thrown away without a single reader seeing it.
+  rpc Install(InstallRequest) returns (InstallResponse);
+
+  // List reports what is installed, what each version contains, and which one is serving.
+  rpc List(ListRequest) returns (ListResponse);
+
+  // Activate points an extension at one of its installed versions.
+  rpc Activate(ActivateRequest) returns (ActivateResponse);
+
+  // Remove deletes one installed version.
+  //
+  // REFUSES THE SERVING VERSION. A delete that silently empties a live panel is indistinguishable, from
+  // the console, from a bug in the panel. Activate another version (or the extension) first.
+  rpc Remove(RemoveRequest) returns (RemoveResponse);
+}
+
+message InstallRequest {
+  // The extension this panel belongs to: "gitdev". It becomes the mount, /ext/gitdev/.
+  string ext_id = 1;
+  // The repository that publishes the panel, as owner/name.
+  string repo = 2;
+  // A tag ("v0.1.4") or "latest". Latest is resolved ONCE, at install time, and recorded — a
+  // floating tag that re-resolves on every request would make the served bytes change under readers.
+  string version = 3;
+  // The release asset to fetch. Defaults to "ui.tar.gz".
+  string asset = 4;
+  // When set, the downloaded bytes must hash to this, or the install fails.
+  //
+  // ON BY CHOICE, NOT BY DEFAULT, because a first install has no expected digest to compare. The
+  // digest of an install is reported either way, so pinning it on the NEXT one is a decision somebody
+  // can make with a value in hand.
+  string sha256 = 5;
+}
+
+message InstallResponse {
+  string ext_id = 1;
+  // The version actually installed, after "latest" was resolved.
+  string version = 2;
+  int32 files = 3;
+  int64 bytes = 4;
+  // sha256 of the downloaded archive, so the next install can pin it.
+  string sha256 = 5;
+  // The metadata the panel declared, read from its ui.json.
+  PanelInfo info = 6;
+}
+
+message ListRequest {}
+
+message ListResponse {
+  repeated ExtState extensions = 1;
+}
+
+// ExtState is one extension's presence on this host.
+message ExtState {
+  string ext_id = 1;
+  // The version browsers are getting, or empty when nothing is active.
+  string active = 2;
+  repeated InstalledVersion versions = 3;
+  // The active version's metadata, when there is one. Absent rather than empty: a panel with no
+  // metadata is a different thing from a panel whose metadata says nothing.
+  PanelInfo info = 4;
+}
+
+message InstalledVersion {
+  string version = 1;
+  int32 files = 2;
+  int64 bytes = 3;
+  string sha256 = 4;
+  // When it was installed, RFC 3339.
+  string installed_at = 5;
+  string repo = 6;
+}
+
+message ActivateRequest {
+  string ext_id = 1;
+  string version = 2;
+}
+message ActivateResponse {
+  string ext_id = 1;
+  string active = 2;
+}
+
+message RemoveRequest {
+  string ext_id = 1;
+  string version = 2;
+}
+message RemoveResponse {
+  string ext_id = 1;
+  string version = 2;
+  // What is serving afterwards — the same version when the removal was of an inactive one, a
+  // different one if the caller asked for that, empty if nothing is.
+  string active = 3;
+}
+
+/**
+ * What a panel declares about itself.
+ *
+ * IT TRAVELS IN THE PANEL'S OWN PACKAGE, as ui.json at the archive's root. The extension's Go binary
+ * used to declare this, which made the panel's identity something the panel could not change — and
+ * made "install a panel" and "deploy a new backend" the same operation.
+ */
+message PanelInfo {
+  // Shown in the console's shelf. Falls back to ext_id when empty.
+  string title = 1;
+  // Keyed by BCP-47 language tag. The console picks the reader's, then the first non-empty.
+  map<string, string> descriptions = 2;
+  // A path WITHIN the panel, e.g. "/icon.svg". Empty means the shelf draws a neutral glyph rather
+  // than a broken image.
+  string icon = 3;
+}

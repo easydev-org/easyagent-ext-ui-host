@@ -1,0 +1,121 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test ./... -race
+
+      # THE PROTO IS THE CONTRACT, so regenerating it must produce the committed files. A stale
+      # src of generated code is how a field exists in the proto and nowhere else.
+      - uses: bufbuild/buf-setup-action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: generated code is current
+        run: |
+          set -euo pipefail
+          cd proto
+          PATH="$PATH:$(go env GOPATH)/bin" buf lint
+          PATH="$PATH:$(go env GOPATH)/bin" buf generate
+          cd ..
+          if ! git diff --quiet -- gen/; then
+            echo "::error::gen/ is stale — run buf generate and commit the result"
+            git --no-pager diff --stat -- gen/
+            exit 1
+          fi
+
+  # The service, against a REAL GitHub release.
+  #
+  # THE INSTALLER IS THE PART THAT CANNOT BE TESTED WITH A FAKE. It fetches a tarball over HTTP,
+  # unpacks it, and writes to disk — and every one of those steps has a failure mode a unit test with a
+  # stub source never reaches. This job installs the panel that actually exists, then serves it.
+  live:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: build
+        run: go build -o /tmp/ext-ui-host ./cmd/ext-ui-host
+
+      - name: install a real panel, serve it, then remove it
+        env:
+          DATA: /tmp/uidata
+          PORT: '18099'
+        run: |
+          set -euo pipefail
+          mkdir -p "$DATA"
+          UI_DATA_DIR="$DATA" PORT="$PORT" ADMIN_TOKEN=ci-token /tmp/ext-ui-host &
+          SRV=$!
+          trap 'kill $SRV 2>/dev/null || true' EXIT
+
+          for i in $(seq 1 30); do
+            if wget -q -O- "http://127.0.0.1:$PORT/healthz" >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+
+          # Nothing installed yet: the discovery probe must 404, not answer an empty panel. The console
+          # reads a non-200 as "no UI" and leaves the extension out of its shelf.
+          code=$(wget -q -S -O /dev/null "http://127.0.0.1:$PORT/ext/gitdev/api/v1/ui" 2>&1 | grep -o 'HTTP/[0-9.]* [0-9]*' | tail -1 | awk '{print $2}' || echo 000)
+          test "$code" = "404" || { echo "::error::expected 404 before install, got $code"; exit 1; }
+
+          echo "--- installing ---"
+          wget -q -O /tmp/install.json \
+            --header='Content-Type: application/json' \
+            --header='Connect-Protocol-Version: 1' \
+            --header='Authorization: Bearer ci-token' \
+            --post-data='{"extId":"gitdev","repo":"easydev-org/easyagent-gitdev-ext-ui","version":"latest"}' \
+            "http://127.0.0.1:$PORT/admin/ui.v1.UiHostService/Install"
+          cat /tmp/install.json
+
+          # INSTALLING MUST NOT SERVE. The whole point of separating install from activate is that a
+          # broken package can be looked at before anybody sees it.
+          code=$(wget -q -S -O /dev/null "http://127.0.0.1:$PORT/ext/gitdev/api/v1/ui" 2>&1 | grep -o 'HTTP/[0-9.]* [0-9]*' | tail -1 | awk '{print $2}' || echo 000)
+          test "$code" = "404" || { echo "::error::an install must not activate, but the panel answered $code"; exit 1; }
+
+          echo "--- activating ---"
+          V=$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' /tmp/install.json)
+          wget -q -O /dev/null \
+            --header='Content-Type: application/json' \
+            --header='Connect-Protocol-Version: 1' \
+            --header='Authorization: Bearer ci-token' \
+            --post-data="{\"extId\":\"gitdev\",\"version\":\"$V\"}" \
+            "http://127.0.0.1:$PORT/admin/ui.v1.UiHostService/Activate"
+
+          echo "--- the panel answers ---"
+          wget -q -O /tmp/info.json "http://127.0.0.1:$PORT/ext/gitdev/api/v1/ui"
+          cat /tmp/info.json
+          grep -q '"base"' /tmp/info.json || { echo "::error::the discovery answer has no base"; exit 1; }
+
+          wget -q -O /tmp/index.html "http://127.0.0.1:$PORT/ext/gitdev/"
+          grep -qi '<html' /tmp/index.html || { echo "::error::the bundle did not serve index.html"; exit 1; }
+
+          # A missing ASSET is a 404, not index.html: answering a .js request with HTML is how a
+          # bundling mistake becomes "the page loads but nothing works".
+          code=$(wget -q -S -O /dev/null "http://127.0.0.1:$PORT/ext/gitdev/assets/nope.js" 2>&1 | grep -o 'HTTP/[0-9.]* [0-9]*' | tail -1 | awk '{print $2}' || echo 000)
+          test "$code" = "404" || { echo "::error::a missing asset must 404, got $code"; exit 1; }
+
+          echo "--- the serving version cannot be removed ---"
+          code=$(wget -q -S -O /dev/null \
+            --header='Content-Type: application/json' \
+            --header='Connect-Protocol-Version: 1' \
+            --header='Authorization: Bearer ci-token' \
+            --post-data="{\"extId\":\"gitdev\",\"version\":\"$V\"}" \
+            "http://127.0.0.1:$PORT/admin/ui.v1.UiHostService/Remove" 2>&1 | grep -o 'HTTP/[0-9.]* [0-9]*' | tail -1 | awk '{print $2}' || echo 000)
+          test "$code" = "400" || { echo "::error::removing the serving version must be refused, got $code"; exit 1; }
+
+          echo "all live checks passed"
