@@ -14,18 +14,14 @@
 #   - each extension's Service (`<id>-ext`), for /ext/<id>/api/*
 #   - a volume at /data, because the installed panels are the only state
 #   - egress to github.com, to install from a release
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: ext-ui-host-data
-  namespace: dev
-spec:
-  accessModes: [ReadWriteOnce]
-  storageClassName: workspace-local
-  resources:
-    requests:
-      storage: 5Gi
----
+#
+# THE PVC IS NOT IN THIS FILE. It is created once by `deploy/pvc.yaml`, because a bound PVC cannot be
+# re-applied — it carries a volumeName that this kind of manifest does not — and putting it here would
+# make every subsequent apply fail on it while the rest of the rollout proceeded. One failing object in
+# the middle of a rollout is worse than a documented second command.
+#
+#   kubectl apply -f deploy/pvc.yaml        # once
+#   kubectl apply -f deploy/ext-ui-host.yaml  # every release
 apiVersion: v1
 kind: Secret
 metadata:
@@ -33,6 +29,13 @@ metadata:
   namespace: dev
 type: Opaque
 stringData:
+  # THIS SECRET IS IN THE FILE FOR A FIRST INSTALL, AND SHOULD NOT STAY THERE.
+  #
+  # Re-applying a manifest that GENERATES a token would rotate it on every rollout — every pod would
+  # restart, and anything holding the old value would start failing at /admin. A real deployment keeps
+  # the credential out of the repository (sealed-secrets, an external secret operator, or a Secret
+  # created by hand) and applies this file with the Secret already present, which is a no-op.
+  #
   # Installing a panel writes the files the console then executes at its own origin, so this is a
   # real credential. The service logs a warning when it is empty.
   admin-token: REPLACE_ME

@@ -1,0 +1,24 @@
+# THE PANELS' VOLUME. APPLY THIS ONCE, BEFORE THE FIRST DEPLOYMENT — NOT WITH IT.
+#
+# A BOUND PVC IS EFFECTIVELY IMMUTABLE: once the provisioner has attached it to a volume, the object
+# carries `spec.volumeName`, and re-applying this file omits that field — which the API server reads as
+# "clear the binding" and refuses with
+#
+#   spec: Forbidden: spec is immutable after creation except resources.requests
+#
+# That is not a mistake in this file; it is what a re-apply of ANY bound PVC does. Keeping it separate
+# is what lets `kubectl apply -f deploy/ext-ui-host.yaml` be run on every release, which is the command
+# somebody actually types, without one failing object in the middle of a rollout.
+#
+# WHAT CHANGES ARE ALLOWED: raising the size below is accepted (a PVC may grow). Lowering it is not.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ext-ui-host-data
+  namespace: dev
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: workspace-local
+  resources:
+    requests:
+      storage: 5Gi
