@@ -8,7 +8,7 @@
 # dependencies to drift.
 #
 # The tag is pinned by CONSOLE_IMAGE so a build of this pod is reproducible.
-ARG CONSOLE_IMAGE=ghcr.io/easydev-org/easyagent-webui:0.6.1
+ARG CONSOLE_IMAGE=ghcr.io/easydev-org/easyagent-webui:0.6.2
 FROM ${CONSOLE_IMAGE} AS console
 
 FROM golang:1.26-alpine AS build
