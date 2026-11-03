@@ -48,12 +48,12 @@ func (s *Service) Install(ctx context.Context, req *uiv1.InstallRequest) (*uiv1.
 		return nil, codeFor(err)
 	}
 	return &uiv1.InstallResponse{
-		ExtId:  req.GetExtId(),
+		ExtId:   req.GetExtId(),
 		Version: meta.Version,
-		Files:  int32(meta.Files),
-		Bytes:  meta.Bytes,
-		Sha256: meta.SHA256,
-		Info:   panelInfo(info),
+		Files:   int32(meta.Files),
+		Bytes:   meta.Bytes,
+		Sha256:  meta.SHA256,
+		Info:    panelInfo(info),
 	}, nil
 }
 

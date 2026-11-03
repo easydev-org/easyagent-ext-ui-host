@@ -14,6 +14,21 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      # GOFMT, BEFORE THE BUILD. A formatting problem is not a build failure, so it needs its own
+      # step: otherwise the compiler accepts the file and the only signal is a diff nobody looks at.
+      #
+      # `-l` NAMES THE FILES AND EXITS 0, so the test is on its OUTPUT. Running `gofmt -l` alone would
+      # pass forever; that mistake is common enough to be worth this comment.
+      - name: gofmt
+        run: |
+          set -euo pipefail
+          out="$(gofmt -l . | grep -v '^vendor/' || true)"
+          if [ -n "$out" ]; then
+            echo "::error::these files are not gofmt-formatted. Run: gofmt -w \$(echo \"$out\")"
+            echo "$out"
+            exit 1
+          fi
+          echo "gofmt: clean"
       - run: go build ./...
       - run: go vet ./...
       - run: go test ./... -race
