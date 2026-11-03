@@ -7,4 +7,4 @@ require (
 	google.golang.org/protobuf v1.36.12
 )
 
-require github.com/easydev-org/easybus-sdk v0.12.0 // indirect
+require github.com/easydev-org/easybus-sdk v0.13.1 // indirect
