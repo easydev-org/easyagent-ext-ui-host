@@ -4,5 +4,7 @@ go 1.26.5
 
 require (
 	connectrpc.com/connect/v2 v2.0.0
-	google.golang.org/protobuf v1.36.11
+	google.golang.org/protobuf v1.36.12
 )
+
+require github.com/easydev-org/easybus-sdk v0.11.1 // indirect
