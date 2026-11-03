@@ -3,11 +3,11 @@
 // EVERY VERSION LIVES IN ITS OWN DIRECTORY, and `current` is a symlink that decides which one serves.
 // That is the whole design:
 //
-//   * an install writes to a new directory, so a failed or broken package can never damage the version
+//   - an install writes to a new directory, so a failed or broken package can never damage the version
 //     a reader is looking at;
-//   * a switch is one `rename` of a symlink, which is atomic — there is no window where the extension
+//   - a switch is one `rename` of a symlink, which is atomic — there is no window where the extension
 //     has no panel or two;
-//   * a rollback is the same operation, because the old version is still on disk.
+//   - a rollback is the same operation, because the old version is still on disk.
 //
 // A single directory overwritten in place would give none of those, and the failure would be a panel
 // that 404s for everybody at once.

@@ -114,9 +114,9 @@ func (g *GitHubReleases) Find(ctx context.Context, repo, version, asset string) 
 
 // Installer downloads and unpacks one panel version.
 type Installer struct {
-	Store   *Store
-	Source  ReleaseSource
-	Client  *http.Client
+	Store  *Store
+	Source ReleaseSource
+	Client *http.Client
 	// MaxBytes bounds the download. A panel bundle is a few megabytes; a tarball of a gigabyte is not
 	// one, and reading it before finding that out costs the disk it would have filled.
 	MaxBytes int64
