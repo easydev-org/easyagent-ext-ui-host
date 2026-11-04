@@ -64,6 +64,11 @@ jobs:
       # THE IMAGE MUST CONTAIN THE CONSOLE. `COPY --from=console /srv` of a wrong path produces an
       # image that builds, starts, and then exits on its own guard — which is a deploy-time failure
       # nobody asked for. Checking here puts it at build time, where the message can name the cause.
+      #
+      # DO NOT RUN THE BINARY TO INSPECT IT. `ext-ui-host` takes no flags: given one it ignores it and
+      # serves, so `/app/ext-ui-host --help` hung this job for 40 minutes on a build that had already
+      # pushed a good image. Check that the file exists and is executable instead — starting a server
+      # to learn its version is not something a build step can afford to do.
       - name: the console is inside the image
         run: |
           set -euo pipefail
@@ -71,6 +76,6 @@ jobs:
           docker run --rm --entrypoint sh "$img" -c '
             set -e
             test -f /srv/index.html || { echo "FATAL: /srv/index.html is missing"; ls /srv || true; exit 1; }
+            test -x /app/ext-ui-host || { echo "FATAL: /app/ext-ui-host is missing"; ls -l /app || true; exit 1; }
             echo "console bundle: $(find /srv -type f | wc -l) files"
-            /app/ext-ui-host --help 2>/dev/null || true
           '
