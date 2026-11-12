@@ -164,6 +164,93 @@ func panelInfo(m map[string]any) *uiv1.PanelInfo {
 			}
 		}
 	}
+	// THE CONTRIBUTIONS, so an admin caller sees the same thing the console will.
+	//
+	// WITHOUT THIS the HTTP answer at /ext/<id>/api/v1/ui carries them (that path passes the raw
+	// ui.json through) while every RPC answer omits them — two views of one panel that disagree, and
+	// the one a script reads is the one that is wrong.
+	if c, ok := m["contributes"].(map[string]any); ok {
+		out.Contributes = contributesInfo(c)
+	}
+	return out
+}
+
+/**
+ * contributesInfo converts the panel's `contributes` object into the proto shape.
+ *
+ * THE WIRE SPELLS IT `session_views` while the interface uses camelCase elsewhere; both are accepted
+ * here for the same reason PANEL_REPOS accepts both — a panel author writing either should not end up
+ * with a declaration that is silently ignored.
+ *
+ * A MALFORMED ENTRY IS DROPPED, NOT THE WHOLE TABLE: a session view with no menu label cannot be
+ * opened, but it must not cost the panel its other views.
+ */
+func contributesInfo(c map[string]any) *uiv1.Contributes {
+	out := &uiv1.Contributes{}
+	if pages, ok := c["pages"].([]any); ok {
+		for _, raw := range pages {
+			p, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			route, _ := p["route"].(string)
+			if route == "" {
+				continue
+			}
+			page := &uiv1.Page{Route: route}
+			page.Title, _ = p["title"].(string)
+			page.Icon, _ = p["icon"].(string)
+			if d, ok := p["descriptions"].(map[string]any); ok {
+				page.Descriptions = stringMap(d)
+			}
+			out.Pages = append(out.Pages, page)
+		}
+	}
+	rawViews, ok := c["session_views"].([]any)
+	if !ok {
+		rawViews, _ = c["sessionViews"].([]any)
+	}
+	for _, raw := range rawViews {
+		s, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		id, _ := s["id"].(string)
+		route, _ := s["route"].(string)
+		label, _ := s["menu_label"].(string)
+		if label == "" {
+			label, _ = s["menuLabel"].(string)
+		}
+		if id == "" || route == "" || label == "" {
+			continue
+		}
+		view := &uiv1.SessionView{Id: id, Route: route, MenuLabel: label}
+		view.Title, _ = s["title"].(string)
+		ns, _ := s["selection_namespace"].(string)
+		if ns == "" {
+			ns, _ = s["selectionNamespace"].(string)
+		}
+		view.SelectionNamespace = ns
+		out.SessionViews = append(out.SessionViews, view)
+	}
+	if proxies, ok := c["proxies"].([]any); ok {
+		for _, raw := range proxies {
+			if s, ok := raw.(string); ok && s != "" {
+				out.Proxies = append(out.Proxies, s)
+			}
+		}
+	}
+	return out
+}
+
+// stringMap keeps only non-empty string values, for the language-keyed maps.
+func stringMap(raw map[string]any) map[string]string {
+	out := make(map[string]string, len(raw))
+	for k, v := range raw {
+		if s, ok := v.(string); ok && s != "" {
+			out[k] = s
+		}
+	}
 	return out
 }
 

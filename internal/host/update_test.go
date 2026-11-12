@@ -227,3 +227,62 @@ func TestSyncWithoutAListOrConfigurationSaysSo(t *testing.T) {
 		t.Fatal("an unconfigured host should refuse rather than silently do nothing")
 	}
 }
+
+/**
+ * The RPC answer must carry the same contributions the HTTP answer does.
+ *
+ * TWO VIEWS OF ONE PANEL THAT DISAGREE IS THE BUG THIS PREVENTS: /ext/<id>/api/v1/ui passes the raw
+ * ui.json through, so it always had `contributes`; PanelInfo did not map the field, so every RPC answer
+ * omitted it. A script reading Install/Update/List got a panel with no session views and no proxies,
+ * which is indistinguishable from a panel that declared none.
+ */
+func TestPanelInfoCarriesContributions(t *testing.T) {
+	info := panelInfo(map[string]any{
+		"title": "Sandboxes",
+		"contributes": map[string]any{
+			"session_views": []any{
+				map[string]any{
+					"id": "sandbox", "route": "/", "title": "Sandbox",
+					"menu_label": "Sandbox", "selection_namespace": "sandbox",
+				},
+				map[string]any{"id": "no-label", "route": "/x"}, // dropped: cannot be opened
+			},
+			"proxies": []any{"desktop", ""},
+			"pages":   []any{map[string]any{"route": "/pulls", "title": "Pulls"}},
+		},
+	})
+	c := info.GetContributes()
+	if c == nil {
+		t.Fatal("contributions were dropped from the RPC answer")
+	}
+	if len(c.GetSessionViews()) != 1 || c.GetSessionViews()[0].GetSelectionNamespace() != "sandbox" {
+		t.Fatalf("want one session view with its namespace, got %+v", c.GetSessionViews())
+	}
+	if len(c.GetProxies()) != 1 || c.GetProxies()[0] != "desktop" {
+		t.Fatalf("want [desktop], got %v", c.GetProxies())
+	}
+	if len(c.GetPages()) != 1 || c.GetPages()[0].GetRoute() != "/pulls" {
+		t.Fatalf("want one page, got %+v", c.GetPages())
+	}
+}
+
+func TestPanelInfoAcceptsCamelCaseContributions(t *testing.T) {
+	// The wire uses snake_case; a panel author following the TypeScript interface may write camelCase.
+	// Both are accepted so a declaration is never silently ignored.
+	info := panelInfo(map[string]any{
+		"contributes": map[string]any{
+			"sessionViews": []any{
+				map[string]any{
+					"id": "a", "route": "/s", "menuLabel": "A", "selectionNamespace": "ns",
+				},
+			},
+		},
+	})
+	c := info.GetContributes()
+	if len(c.GetSessionViews()) != 1 || c.GetSessionViews()[0].GetMenuLabel() != "A" {
+		t.Fatalf("camelCase was not accepted: %+v", c.GetSessionViews())
+	}
+	if c.GetSessionViews()[0].GetSelectionNamespace() != "ns" {
+		t.Fatalf("camelCase namespace was not accepted: %+v", c.GetSessionViews()[0])
+	}
+}
