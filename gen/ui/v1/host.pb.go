@@ -655,6 +655,421 @@ func (x *RemoveResponse) GetActive() string {
 	return ""
 }
 
+type UpdateRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The extension this panel belongs to: "sandbox". It becomes the mount, /ext/sandbox/.
+	ExtId string `protobuf:"bytes,1,opt,name=ext_id,json=extId,proto3" json:"ext_id,omitempty"`
+	// The repository that publishes the panel, as owner/name. Empty means "whatever repo installed the
+	// active version" — which is what a caller that only knows an ext id can supply.
+	Repo string `protobuf:"bytes,2,opt,name=repo,proto3" json:"repo,omitempty"`
+	// The release asset to fetch. Defaults to "ui.tar.gz".
+	Asset string `protobuf:"bytes,3,opt,name=asset,proto3" json:"asset,omitempty"`
+	// When true, resolve the newest version and report it WITHOUT downloading or activating.
+	//
+	// WHAT THIS IS FOR: an operator or a cron job that wants to know "is there an update" without
+	// changing what readers see. The answer includes both versions, so the decision can be made on a
+	// value rather than on a second request.
+	DryRun        bool `protobuf:"varint,4,opt,name=dry_run,json=dryRun,proto3" json:"dry_run,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateRequest) Reset() {
+	*x = UpdateRequest{}
+	mi := &file_ui_v1_host_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateRequest) ProtoMessage() {}
+
+func (x *UpdateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ui_v1_host_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateRequest.ProtoReflect.Descriptor instead.
+func (*UpdateRequest) Descriptor() ([]byte, []int) {
+	return file_ui_v1_host_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *UpdateRequest) GetExtId() string {
+	if x != nil {
+		return x.ExtId
+	}
+	return ""
+}
+
+func (x *UpdateRequest) GetRepo() string {
+	if x != nil {
+		return x.Repo
+	}
+	return ""
+}
+
+func (x *UpdateRequest) GetAsset() string {
+	if x != nil {
+		return x.Asset
+	}
+	return ""
+}
+
+func (x *UpdateRequest) GetDryRun() bool {
+	if x != nil {
+		return x.DryRun
+	}
+	return false
+}
+
+type UpdateResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	ExtId string                 `protobuf:"bytes,1,opt,name=ext_id,json=extId,proto3" json:"ext_id,omitempty"`
+	// The version that was serving before this call. Empty when nothing was.
+	From string `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
+	// The newest version the release feed reports.
+	To string `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
+	// True when this call changed what is serving. False for a dry run, and false when `to` was
+	// already active.
+	Changed bool `protobuf:"varint,4,opt,name=changed,proto3" json:"changed,omitempty"`
+	// The downloaded archive's digest, so the NEXT update can pin it.
+	Sha256 string `protobuf:"bytes,5,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	Files  int32  `protobuf:"varint,6,opt,name=files,proto3" json:"files,omitempty"`
+	Bytes  int64  `protobuf:"varint,7,opt,name=bytes,proto3" json:"bytes,omitempty"`
+	// The metadata the panel declared, read from the new version's ui.json.
+	Info *PanelInfo `protobuf:"bytes,8,opt,name=info,proto3" json:"info,omitempty"`
+	// The repo the version came from, which is recorded per install and may have been inferred.
+	Repo          string `protobuf:"bytes,9,opt,name=repo,proto3" json:"repo,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateResponse) Reset() {
+	*x = UpdateResponse{}
+	mi := &file_ui_v1_host_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateResponse) ProtoMessage() {}
+
+func (x *UpdateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_ui_v1_host_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateResponse.ProtoReflect.Descriptor instead.
+func (*UpdateResponse) Descriptor() ([]byte, []int) {
+	return file_ui_v1_host_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *UpdateResponse) GetExtId() string {
+	if x != nil {
+		return x.ExtId
+	}
+	return ""
+}
+
+func (x *UpdateResponse) GetFrom() string {
+	if x != nil {
+		return x.From
+	}
+	return ""
+}
+
+func (x *UpdateResponse) GetTo() string {
+	if x != nil {
+		return x.To
+	}
+	return ""
+}
+
+func (x *UpdateResponse) GetChanged() bool {
+	if x != nil {
+		return x.Changed
+	}
+	return false
+}
+
+func (x *UpdateResponse) GetSha256() string {
+	if x != nil {
+		return x.Sha256
+	}
+	return ""
+}
+
+func (x *UpdateResponse) GetFiles() int32 {
+	if x != nil {
+		return x.Files
+	}
+	return 0
+}
+
+func (x *UpdateResponse) GetBytes() int64 {
+	if x != nil {
+		return x.Bytes
+	}
+	return 0
+}
+
+func (x *UpdateResponse) GetInfo() *PanelInfo {
+	if x != nil {
+		return x.Info
+	}
+	return nil
+}
+
+func (x *UpdateResponse) GetRepo() string {
+	if x != nil {
+		return x.Repo
+	}
+	return ""
+}
+
+type SyncRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// What to update. Empty means "the panels this host was configured with" (PANEL_REPOS).
+	Panels []*PanelRepo `protobuf:"bytes,1,rep,name=panels,proto3" json:"panels,omitempty"`
+	// Passed to every Update. A dry run reports what WOULD change and downloads nothing.
+	DryRun        bool `protobuf:"varint,2,opt,name=dry_run,json=dryRun,proto3" json:"dry_run,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SyncRequest) Reset() {
+	*x = SyncRequest{}
+	mi := &file_ui_v1_host_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SyncRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SyncRequest) ProtoMessage() {}
+
+func (x *SyncRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ui_v1_host_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SyncRequest.ProtoReflect.Descriptor instead.
+func (*SyncRequest) Descriptor() ([]byte, []int) {
+	return file_ui_v1_host_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *SyncRequest) GetPanels() []*PanelRepo {
+	if x != nil {
+		return x.Panels
+	}
+	return nil
+}
+
+func (x *SyncRequest) GetDryRun() bool {
+	if x != nil {
+		return x.DryRun
+	}
+	return false
+}
+
+// PanelRepo names one panel to keep up to date.
+type PanelRepo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ExtId         string                 `protobuf:"bytes,1,opt,name=ext_id,json=extId,proto3" json:"ext_id,omitempty"`
+	Repo          string                 `protobuf:"bytes,2,opt,name=repo,proto3" json:"repo,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PanelRepo) Reset() {
+	*x = PanelRepo{}
+	mi := &file_ui_v1_host_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PanelRepo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PanelRepo) ProtoMessage() {}
+
+func (x *PanelRepo) ProtoReflect() protoreflect.Message {
+	mi := &file_ui_v1_host_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PanelRepo.ProtoReflect.Descriptor instead.
+func (*PanelRepo) Descriptor() ([]byte, []int) {
+	return file_ui_v1_host_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *PanelRepo) GetExtId() string {
+	if x != nil {
+		return x.ExtId
+	}
+	return ""
+}
+
+func (x *PanelRepo) GetRepo() string {
+	if x != nil {
+		return x.Repo
+	}
+	return ""
+}
+
+type SyncResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Results       []*SyncResult          `protobuf:"bytes,1,rep,name=results,proto3" json:"results,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SyncResponse) Reset() {
+	*x = SyncResponse{}
+	mi := &file_ui_v1_host_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SyncResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SyncResponse) ProtoMessage() {}
+
+func (x *SyncResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_ui_v1_host_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SyncResponse.ProtoReflect.Descriptor instead.
+func (*SyncResponse) Descriptor() ([]byte, []int) {
+	return file_ui_v1_host_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *SyncResponse) GetResults() []*SyncResult {
+	if x != nil {
+		return x.Results
+	}
+	return nil
+}
+
+// SyncResult is one entry's outcome. An error is reported PER ENTRY rather than failing the call: a
+// single unreachable release must not stop the other panels from updating.
+type SyncResult struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	ExtId string                 `protobuf:"bytes,1,opt,name=ext_id,json=extId,proto3" json:"ext_id,omitempty"`
+	Repo  string                 `protobuf:"bytes,2,opt,name=repo,proto3" json:"repo,omitempty"`
+	// Present when the entry succeeded. Absent when it failed, which is itself the signal.
+	Update *UpdateResponse `protobuf:"bytes,3,opt,name=update,proto3" json:"update,omitempty"`
+	// Empty on success. A human-readable reason otherwise.
+	Error         string `protobuf:"bytes,4,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SyncResult) Reset() {
+	*x = SyncResult{}
+	mi := &file_ui_v1_host_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SyncResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SyncResult) ProtoMessage() {}
+
+func (x *SyncResult) ProtoReflect() protoreflect.Message {
+	mi := &file_ui_v1_host_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SyncResult.ProtoReflect.Descriptor instead.
+func (*SyncResult) Descriptor() ([]byte, []int) {
+	return file_ui_v1_host_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *SyncResult) GetExtId() string {
+	if x != nil {
+		return x.ExtId
+	}
+	return ""
+}
+
+func (x *SyncResult) GetRepo() string {
+	if x != nil {
+		return x.Repo
+	}
+	return ""
+}
+
+func (x *SyncResult) GetUpdate() *UpdateResponse {
+	if x != nil {
+		return x.Update
+	}
+	return nil
+}
+
+func (x *SyncResult) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
 // *
 // What a panel declares about itself.
 //
@@ -684,7 +1099,7 @@ type PanelInfo struct {
 
 func (x *PanelInfo) Reset() {
 	*x = PanelInfo{}
-	mi := &file_ui_v1_host_proto_msgTypes[10]
+	mi := &file_ui_v1_host_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -696,7 +1111,7 @@ func (x *PanelInfo) String() string {
 func (*PanelInfo) ProtoMessage() {}
 
 func (x *PanelInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_ui_v1_host_proto_msgTypes[10]
+	mi := &file_ui_v1_host_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -709,7 +1124,7 @@ func (x *PanelInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PanelInfo.ProtoReflect.Descriptor instead.
 func (*PanelInfo) Descriptor() ([]byte, []int) {
-	return file_ui_v1_host_proto_rawDescGZIP(), []int{10}
+	return file_ui_v1_host_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *PanelInfo) GetTitle() string {
@@ -764,7 +1179,7 @@ type Contributes struct {
 
 func (x *Contributes) Reset() {
 	*x = Contributes{}
-	mi := &file_ui_v1_host_proto_msgTypes[11]
+	mi := &file_ui_v1_host_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -776,7 +1191,7 @@ func (x *Contributes) String() string {
 func (*Contributes) ProtoMessage() {}
 
 func (x *Contributes) ProtoReflect() protoreflect.Message {
-	mi := &file_ui_v1_host_proto_msgTypes[11]
+	mi := &file_ui_v1_host_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -789,7 +1204,7 @@ func (x *Contributes) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Contributes.ProtoReflect.Descriptor instead.
 func (*Contributes) Descriptor() ([]byte, []int) {
-	return file_ui_v1_host_proto_rawDescGZIP(), []int{11}
+	return file_ui_v1_host_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *Contributes) GetPages() []*Page {
@@ -831,7 +1246,7 @@ type Page struct {
 
 func (x *Page) Reset() {
 	*x = Page{}
-	mi := &file_ui_v1_host_proto_msgTypes[12]
+	mi := &file_ui_v1_host_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -843,7 +1258,7 @@ func (x *Page) String() string {
 func (*Page) ProtoMessage() {}
 
 func (x *Page) ProtoReflect() protoreflect.Message {
-	mi := &file_ui_v1_host_proto_msgTypes[12]
+	mi := &file_ui_v1_host_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -856,7 +1271,7 @@ func (x *Page) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Page.ProtoReflect.Descriptor instead.
 func (*Page) Descriptor() ([]byte, []int) {
-	return file_ui_v1_host_proto_rawDescGZIP(), []int{12}
+	return file_ui_v1_host_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *Page) GetRoute() string {
@@ -910,7 +1325,7 @@ type SessionView struct {
 
 func (x *SessionView) Reset() {
 	*x = SessionView{}
-	mi := &file_ui_v1_host_proto_msgTypes[13]
+	mi := &file_ui_v1_host_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -922,7 +1337,7 @@ func (x *SessionView) String() string {
 func (*SessionView) ProtoMessage() {}
 
 func (x *SessionView) ProtoReflect() protoreflect.Message {
-	mi := &file_ui_v1_host_proto_msgTypes[13]
+	mi := &file_ui_v1_host_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -935,7 +1350,7 @@ func (x *SessionView) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SessionView.ProtoReflect.Descriptor instead.
 func (*SessionView) Descriptor() ([]byte, []int) {
-	return file_ui_v1_host_proto_rawDescGZIP(), []int{13}
+	return file_ui_v1_host_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *SessionView) GetId() string {
@@ -1020,7 +1435,36 @@ const file_ui_v1_host_proto_rawDesc = "" +
 	"\x0eRemoveResponse\x12\x15\n" +
 	"\x06ext_id\x18\x01 \x01(\tR\x05extId\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12\x16\n" +
-	"\x06active\x18\x03 \x01(\tR\x06active\"\xf4\x01\n" +
+	"\x06active\x18\x03 \x01(\tR\x06active\"i\n" +
+	"\rUpdateRequest\x12\x15\n" +
+	"\x06ext_id\x18\x01 \x01(\tR\x05extId\x12\x12\n" +
+	"\x04repo\x18\x02 \x01(\tR\x04repo\x12\x14\n" +
+	"\x05asset\x18\x03 \x01(\tR\x05asset\x12\x17\n" +
+	"\adry_run\x18\x04 \x01(\bR\x06dryRun\"\xe3\x01\n" +
+	"\x0eUpdateResponse\x12\x15\n" +
+	"\x06ext_id\x18\x01 \x01(\tR\x05extId\x12\x12\n" +
+	"\x04from\x18\x02 \x01(\tR\x04from\x12\x0e\n" +
+	"\x02to\x18\x03 \x01(\tR\x02to\x12\x18\n" +
+	"\achanged\x18\x04 \x01(\bR\achanged\x12\x16\n" +
+	"\x06sha256\x18\x05 \x01(\tR\x06sha256\x12\x14\n" +
+	"\x05files\x18\x06 \x01(\x05R\x05files\x12\x14\n" +
+	"\x05bytes\x18\a \x01(\x03R\x05bytes\x12$\n" +
+	"\x04info\x18\b \x01(\v2\x10.ui.v1.PanelInfoR\x04info\x12\x12\n" +
+	"\x04repo\x18\t \x01(\tR\x04repo\"P\n" +
+	"\vSyncRequest\x12(\n" +
+	"\x06panels\x18\x01 \x03(\v2\x10.ui.v1.PanelRepoR\x06panels\x12\x17\n" +
+	"\adry_run\x18\x02 \x01(\bR\x06dryRun\"6\n" +
+	"\tPanelRepo\x12\x15\n" +
+	"\x06ext_id\x18\x01 \x01(\tR\x05extId\x12\x12\n" +
+	"\x04repo\x18\x02 \x01(\tR\x04repo\";\n" +
+	"\fSyncResponse\x12+\n" +
+	"\aresults\x18\x01 \x03(\v2\x11.ui.v1.SyncResultR\aresults\"|\n" +
+	"\n" +
+	"SyncResult\x12\x15\n" +
+	"\x06ext_id\x18\x01 \x01(\tR\x05extId\x12\x12\n" +
+	"\x04repo\x18\x02 \x01(\tR\x04repo\x12-\n" +
+	"\x06update\x18\x03 \x01(\v2\x15.ui.v1.UpdateResponseR\x06update\x12\x14\n" +
+	"\x05error\x18\x04 \x01(\tR\x05error\"\xf4\x01\n" +
 	"\tPanelInfo\x12\x14\n" +
 	"\x05title\x18\x01 \x01(\tR\x05title\x12F\n" +
 	"\fdescriptions\x18\x02 \x03(\v2\".ui.v1.PanelInfo.DescriptionsEntryR\fdescriptions\x12\x12\n" +
@@ -1047,12 +1491,14 @@ const file_ui_v1_host_proto_rawDesc = "" +
 	"\x05title\x18\x03 \x01(\tR\x05title\x12\x1d\n" +
 	"\n" +
 	"menu_label\x18\x04 \x01(\tR\tmenuLabel\x12/\n" +
-	"\x13selection_namespace\x18\x05 \x01(\tR\x12selectionNamespace2\xee\x01\n" +
+	"\x13selection_namespace\x18\x05 \x01(\tR\x12selectionNamespace2\xd6\x02\n" +
 	"\rUiHostService\x128\n" +
 	"\aInstall\x12\x15.ui.v1.InstallRequest\x1a\x16.ui.v1.InstallResponse\x12/\n" +
 	"\x04List\x12\x12.ui.v1.ListRequest\x1a\x13.ui.v1.ListResponse\x12;\n" +
 	"\bActivate\x12\x16.ui.v1.ActivateRequest\x1a\x17.ui.v1.ActivateResponse\x125\n" +
-	"\x06Remove\x12\x14.ui.v1.RemoveRequest\x1a\x15.ui.v1.RemoveResponseB=Z;github.com/easydev-org/easyagent-ext-ui-host/gen/ui/v1;uiv1b\x06proto3"
+	"\x06Remove\x12\x14.ui.v1.RemoveRequest\x1a\x15.ui.v1.RemoveResponse\x125\n" +
+	"\x06Update\x12\x14.ui.v1.UpdateRequest\x1a\x15.ui.v1.UpdateResponse\x12/\n" +
+	"\x04Sync\x12\x12.ui.v1.SyncRequest\x1a\x13.ui.v1.SyncResponseB=Z;github.com/easydev-org/easyagent-ext-ui-host/gen/ui/v1;uiv1b\x06proto3"
 
 var (
 	file_ui_v1_host_proto_rawDescOnce sync.Once
@@ -1066,7 +1512,7 @@ func file_ui_v1_host_proto_rawDescGZIP() []byte {
 	return file_ui_v1_host_proto_rawDescData
 }
 
-var file_ui_v1_host_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_ui_v1_host_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
 var file_ui_v1_host_proto_goTypes = []any{
 	(*InstallRequest)(nil),   // 0: ui.v1.InstallRequest
 	(*InstallResponse)(nil),  // 1: ui.v1.InstallResponse
@@ -1078,36 +1524,50 @@ var file_ui_v1_host_proto_goTypes = []any{
 	(*ActivateResponse)(nil), // 7: ui.v1.ActivateResponse
 	(*RemoveRequest)(nil),    // 8: ui.v1.RemoveRequest
 	(*RemoveResponse)(nil),   // 9: ui.v1.RemoveResponse
-	(*PanelInfo)(nil),        // 10: ui.v1.PanelInfo
-	(*Contributes)(nil),      // 11: ui.v1.Contributes
-	(*Page)(nil),             // 12: ui.v1.Page
-	(*SessionView)(nil),      // 13: ui.v1.SessionView
-	nil,                      // 14: ui.v1.PanelInfo.DescriptionsEntry
-	nil,                      // 15: ui.v1.Page.DescriptionsEntry
+	(*UpdateRequest)(nil),    // 10: ui.v1.UpdateRequest
+	(*UpdateResponse)(nil),   // 11: ui.v1.UpdateResponse
+	(*SyncRequest)(nil),      // 12: ui.v1.SyncRequest
+	(*PanelRepo)(nil),        // 13: ui.v1.PanelRepo
+	(*SyncResponse)(nil),     // 14: ui.v1.SyncResponse
+	(*SyncResult)(nil),       // 15: ui.v1.SyncResult
+	(*PanelInfo)(nil),        // 16: ui.v1.PanelInfo
+	(*Contributes)(nil),      // 17: ui.v1.Contributes
+	(*Page)(nil),             // 18: ui.v1.Page
+	(*SessionView)(nil),      // 19: ui.v1.SessionView
+	nil,                      // 20: ui.v1.PanelInfo.DescriptionsEntry
+	nil,                      // 21: ui.v1.Page.DescriptionsEntry
 }
 var file_ui_v1_host_proto_depIdxs = []int32{
-	10, // 0: ui.v1.InstallResponse.info:type_name -> ui.v1.PanelInfo
+	16, // 0: ui.v1.InstallResponse.info:type_name -> ui.v1.PanelInfo
 	4,  // 1: ui.v1.ListResponse.extensions:type_name -> ui.v1.ExtState
 	5,  // 2: ui.v1.ExtState.versions:type_name -> ui.v1.InstalledVersion
-	10, // 3: ui.v1.ExtState.info:type_name -> ui.v1.PanelInfo
-	14, // 4: ui.v1.PanelInfo.descriptions:type_name -> ui.v1.PanelInfo.DescriptionsEntry
-	11, // 5: ui.v1.PanelInfo.contributes:type_name -> ui.v1.Contributes
-	12, // 6: ui.v1.Contributes.pages:type_name -> ui.v1.Page
-	13, // 7: ui.v1.Contributes.session_views:type_name -> ui.v1.SessionView
-	15, // 8: ui.v1.Page.descriptions:type_name -> ui.v1.Page.DescriptionsEntry
-	0,  // 9: ui.v1.UiHostService.Install:input_type -> ui.v1.InstallRequest
-	2,  // 10: ui.v1.UiHostService.List:input_type -> ui.v1.ListRequest
-	6,  // 11: ui.v1.UiHostService.Activate:input_type -> ui.v1.ActivateRequest
-	8,  // 12: ui.v1.UiHostService.Remove:input_type -> ui.v1.RemoveRequest
-	1,  // 13: ui.v1.UiHostService.Install:output_type -> ui.v1.InstallResponse
-	3,  // 14: ui.v1.UiHostService.List:output_type -> ui.v1.ListResponse
-	7,  // 15: ui.v1.UiHostService.Activate:output_type -> ui.v1.ActivateResponse
-	9,  // 16: ui.v1.UiHostService.Remove:output_type -> ui.v1.RemoveResponse
-	13, // [13:17] is the sub-list for method output_type
-	9,  // [9:13] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	16, // 3: ui.v1.ExtState.info:type_name -> ui.v1.PanelInfo
+	16, // 4: ui.v1.UpdateResponse.info:type_name -> ui.v1.PanelInfo
+	13, // 5: ui.v1.SyncRequest.panels:type_name -> ui.v1.PanelRepo
+	15, // 6: ui.v1.SyncResponse.results:type_name -> ui.v1.SyncResult
+	11, // 7: ui.v1.SyncResult.update:type_name -> ui.v1.UpdateResponse
+	20, // 8: ui.v1.PanelInfo.descriptions:type_name -> ui.v1.PanelInfo.DescriptionsEntry
+	17, // 9: ui.v1.PanelInfo.contributes:type_name -> ui.v1.Contributes
+	18, // 10: ui.v1.Contributes.pages:type_name -> ui.v1.Page
+	19, // 11: ui.v1.Contributes.session_views:type_name -> ui.v1.SessionView
+	21, // 12: ui.v1.Page.descriptions:type_name -> ui.v1.Page.DescriptionsEntry
+	0,  // 13: ui.v1.UiHostService.Install:input_type -> ui.v1.InstallRequest
+	2,  // 14: ui.v1.UiHostService.List:input_type -> ui.v1.ListRequest
+	6,  // 15: ui.v1.UiHostService.Activate:input_type -> ui.v1.ActivateRequest
+	8,  // 16: ui.v1.UiHostService.Remove:input_type -> ui.v1.RemoveRequest
+	10, // 17: ui.v1.UiHostService.Update:input_type -> ui.v1.UpdateRequest
+	12, // 18: ui.v1.UiHostService.Sync:input_type -> ui.v1.SyncRequest
+	1,  // 19: ui.v1.UiHostService.Install:output_type -> ui.v1.InstallResponse
+	3,  // 20: ui.v1.UiHostService.List:output_type -> ui.v1.ListResponse
+	7,  // 21: ui.v1.UiHostService.Activate:output_type -> ui.v1.ActivateResponse
+	9,  // 22: ui.v1.UiHostService.Remove:output_type -> ui.v1.RemoveResponse
+	11, // 23: ui.v1.UiHostService.Update:output_type -> ui.v1.UpdateResponse
+	14, // 24: ui.v1.UiHostService.Sync:output_type -> ui.v1.SyncResponse
+	19, // [19:25] is the sub-list for method output_type
+	13, // [13:19] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_ui_v1_host_proto_init() }
@@ -1121,7 +1581,7 @@ func file_ui_v1_host_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_ui_v1_host_proto_rawDesc), len(file_ui_v1_host_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   16,
+			NumMessages:   22,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

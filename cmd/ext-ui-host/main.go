@@ -12,6 +12,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -24,6 +25,7 @@ import (
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
 
+	uiv1 "github.com/easydev-org/easyagent-ext-ui-host/gen/ui/v1"
 	"github.com/easydev-org/easyagent-ext-ui-host/internal/host"
 	"github.com/easydev-org/easyagent-ext-ui-host/internal/store"
 )
@@ -58,7 +60,34 @@ func main() {
 		Store:  st,
 		Source: &store.GitHubReleases{Token: ghToken},
 	}
-	svc := &host.Service{Store: st, Installer: inst}
+	// WHAT THIS DEPLOYMENT WANTS KEPT UP TO DATE.
+	//
+	// A JSON list of {extId, repo}, e.g.
+	//   PANEL_REPOS='[{"extId":"gitdev","repo":"easydev-org/easyagent-gitdev-ext-ui"}]'
+	//
+	// IT EXISTS SO AN EMPTY `Sync` CALL IS MEANINGFUL. Without it, "update everything" requires the
+	// caller to know every repository — which duplicates knowledge that the deployment already has, and
+	// drifts the moment a panel is added.
+	//
+	// A MALFORMED LIST IS FATAL, unlike a malformed contribution elsewhere. This value decides what
+	// gets installed and executed in the console's origin; starting with it half-understood would mean
+	// a deployment that believes it is managing panels it is not.
+	configured, err := parsePanelRepos(os.Getenv("PANEL_REPOS"))
+	if err != nil {
+		log.Error("PANEL_REPOS is not valid JSON", "err", err)
+		os.Exit(1)
+	}
+	for _, p := range configured {
+		if err := store.ValidID(p.GetExtId()); err != nil {
+			log.Error("PANEL_REPOS has an invalid extId", "extId", p.GetExtId(), "err", err)
+			os.Exit(1)
+		}
+	}
+	if len(configured) > 0 {
+		log.Info("panels configured for Sync", "count", len(configured))
+	}
+
+	svc := &host.Service{Store: st, Installer: inst, ConfiguredPanels: configured}
 	panels := &host.Panels{Store: st}
 
 	if _, err := os.Stat(consoleDir + "/index.html"); err != nil {
@@ -158,4 +187,46 @@ func envOr(k, def string) string {
 		return v
 	}
 	return def
+}
+
+/**
+ * parsePanelRepos reads PANEL_REPOS into the proto shape.
+ *
+ * ACCEPTS TWO SPELLINGS of the same list, because the field is written into a YAML manifest by hand
+ * and a wrong key would otherwise be a silent no-op:
+ *
+ *   [{"extId":"gitdev","repo":"o/n"}]      camelCase, like the JSON the API uses
+ *   [{"ext_id":"gitdev","repo":"o/n"}]     snake_case, like the proto field
+ *
+ * An empty value is an empty list — a host that was not told which panels to manage still works, and
+ * `Sync` says so rather than doing nothing.
+ */
+func parsePanelRepos(raw string) ([]*uiv1.PanelRepo, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	var rows []struct {
+		ExtID      string `json:"extId"`
+		ExtIDSnake string `json:"ext_id"`
+		Repo       string `json:"repo"`
+	}
+	if err := json.Unmarshal([]byte(raw), &rows); err != nil {
+		return nil, err
+	}
+	out := make([]*uiv1.PanelRepo, 0, len(rows))
+	for _, r := range rows {
+		id := r.ExtID
+		if id == "" {
+			id = r.ExtIDSnake
+		}
+		if id == "" || r.Repo == "" {
+			// SKIPPED RATHER THAN REJECTED as a whole: one bad row should not discard the others, and
+			// the caller sees the count in the log line below. A row with no repo could never install
+			// anything, so keeping it would only fail later with a worse message.
+			continue
+		}
+		out = append(out, &uiv1.PanelRepo{ExtId: id, Repo: r.Repo})
+	}
+	return out, nil
 }

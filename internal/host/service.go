@@ -18,6 +18,13 @@ import (
 type Service struct {
 	Store     *store.Store
 	Installer *store.Installer
+	// ConfiguredPanels is what `Sync` updates when the caller passes no list.
+	//
+	// FROM THE HOST'S OWN CONFIGURATION (PANEL_REPOS), because "which panels does this deployment
+	// want" is a deployment fact, not something a caller should have to repeat on every restart. An
+	// empty list means Sync requires an explicit one — the honest failure for a host that was never
+	// told, rather than silently doing nothing.
+	ConfiguredPanels []*uiv1.PanelRepo
 }
 
 var _ uiv1connect.UiHostServiceHandler = (*Service)(nil)

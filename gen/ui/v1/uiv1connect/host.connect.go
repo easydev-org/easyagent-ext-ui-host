@@ -38,6 +38,10 @@ const (
 	UiHostServiceActivateProcedure = "/ui.v1.UiHostService/Activate"
 	// UiHostServiceRemoveProcedure is the procedure name of the UiHostService's Remove RPC.
 	UiHostServiceRemoveProcedure = "/ui.v1.UiHostService/Remove"
+	// UiHostServiceUpdateProcedure is the procedure name of the UiHostService's Update RPC.
+	UiHostServiceUpdateProcedure = "/ui.v1.UiHostService/Update"
+	// UiHostServiceSyncProcedure is the procedure name of the UiHostService's Sync RPC.
+	UiHostServiceSyncProcedure = "/ui.v1.UiHostService/Sync"
 )
 
 var (
@@ -69,6 +73,20 @@ var (
 			Procedure:  UiHostServiceRemoveProcedure,
 		}
 	})
+	uiHostServiceUpdateSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_ui_v1_host_proto.Services().ByName("UiHostService").Methods().ByName("Update"),
+			Procedure:  UiHostServiceUpdateProcedure,
+		}
+	})
+	uiHostServiceSyncSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_ui_v1_host_proto.Services().ByName("UiHostService").Methods().ByName("Sync"),
+			Procedure:  UiHostServiceSyncProcedure,
+		}
+	})
 )
 
 // UiHostServiceClient is a client for the ui.v1.UiHostService service.
@@ -89,6 +107,26 @@ type UiHostServiceClient interface {
 	// REFUSES THE SERVING VERSION. A delete that silently empties a live panel is indistinguishable, from
 	// the console, from a bug in the panel. Activate another version (or the extension) first.
 	Remove(context.Context, *v1.RemoveRequest) (*v1.RemoveResponse, error)
+	// Update resolves the newest release, installs it, and activates it — in one call.
+	//
+	// WHY THIS EXISTS ON TOP OF Install+Activate: those are two requests, and the second is easy to
+	// forget. The failure is silent and confusing — the panel is on disk, the download succeeded, and
+	// readers still see the old one (or nothing at all). This makes the pair atomic from a caller's
+	// point of view.
+	//
+	// IT IS STILL SAFE: if the newest version is ALREADY active, nothing is downloaded and nothing
+	// changes (`changed` is false). If the download fails, the active version is untouched, because
+	// Install writes to a new directory and Activate happens only after it succeeded.
+	Update(context.Context, *v1.UpdateRequest) (*v1.UpdateResponse, error)
+	// Sync updates every panel in a list, and reports per-entry results.
+	//
+	// THE LIST COMES FROM THE CALLER OR FROM THE SERVER'S OWN CONFIGURATION. A deployment that knows
+	// which panels it wants can call this with an empty request after a restart and be back to a known
+	// state; a one-off install can pass its own list.
+	//
+	// ONE FAILURE DOES NOT STOP THE OTHERS: each entry reports its own error, because a single
+	// unreachable release should not prevent the other two panels from updating.
+	Sync(context.Context, *v1.SyncRequest) (*v1.SyncResponse, error)
 }
 
 // NewUiHostServiceClient constructs a client for the ui.v1.UiHostService service. Multiple service
@@ -115,6 +153,26 @@ type UiHostServiceHandler interface {
 	// REFUSES THE SERVING VERSION. A delete that silently empties a live panel is indistinguishable, from
 	// the console, from a bug in the panel. Activate another version (or the extension) first.
 	Remove(context.Context, *v1.RemoveRequest) (*v1.RemoveResponse, error)
+	// Update resolves the newest release, installs it, and activates it — in one call.
+	//
+	// WHY THIS EXISTS ON TOP OF Install+Activate: those are two requests, and the second is easy to
+	// forget. The failure is silent and confusing — the panel is on disk, the download succeeded, and
+	// readers still see the old one (or nothing at all). This makes the pair atomic from a caller's
+	// point of view.
+	//
+	// IT IS STILL SAFE: if the newest version is ALREADY active, nothing is downloaded and nothing
+	// changes (`changed` is false). If the download fails, the active version is untouched, because
+	// Install writes to a new directory and Activate happens only after it succeeded.
+	Update(context.Context, *v1.UpdateRequest) (*v1.UpdateResponse, error)
+	// Sync updates every panel in a list, and reports per-entry results.
+	//
+	// THE LIST COMES FROM THE CALLER OR FROM THE SERVER'S OWN CONFIGURATION. A deployment that knows
+	// which panels it wants can call this with an empty request after a restart and be back to a known
+	// state; a one-off install can pass its own list.
+	//
+	// ONE FAILURE DOES NOT STOP THE OTHERS: each entry reports its own error, because a single
+	// unreachable release should not prevent the other two panels from updating.
+	Sync(context.Context, *v1.SyncRequest) (*v1.SyncResponse, error)
 }
 
 // RegisterUiHostServiceHandler registers svc as the ui.v1.UiHostService implementation on server.
@@ -125,6 +183,8 @@ func RegisterUiHostServiceHandler(server *connect.Server, svc UiHostServiceHandl
 		connect.Method{Spec: uiHostServiceListSpec(), Handler: adapter.list},
 		connect.Method{Spec: uiHostServiceActivateSpec(), Handler: adapter.activate},
 		connect.Method{Spec: uiHostServiceRemoveSpec(), Handler: adapter.remove},
+		connect.Method{Spec: uiHostServiceUpdateSpec(), Handler: adapter.update},
+		connect.Method{Spec: uiHostServiceSyncSpec(), Handler: adapter.sync},
 	)
 }
 
@@ -145,6 +205,14 @@ func (UnimplementedUiHostServiceHandler) Activate(context.Context, *v1.ActivateR
 
 func (UnimplementedUiHostServiceHandler) Remove(context.Context, *v1.RemoveRequest) (*v1.RemoveResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "ui.v1.UiHostService.Remove is not implemented")
+}
+
+func (UnimplementedUiHostServiceHandler) Update(context.Context, *v1.UpdateRequest) (*v1.UpdateResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "ui.v1.UiHostService.Update is not implemented")
+}
+
+func (UnimplementedUiHostServiceHandler) Sync(context.Context, *v1.SyncRequest) (*v1.SyncResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "ui.v1.UiHostService.Sync is not implemented")
 }
 
 type uiHostServiceClient struct {
@@ -178,6 +246,22 @@ func (c *uiHostServiceClient) Activate(ctx context.Context, req *v1.ActivateRequ
 func (c *uiHostServiceClient) Remove(ctx context.Context, req *v1.RemoveRequest) (*v1.RemoveResponse, error) {
 	var res v1.RemoveResponse
 	if err := c.client.CallUnary(ctx, uiHostServiceRemoveSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *uiHostServiceClient) Update(ctx context.Context, req *v1.UpdateRequest) (*v1.UpdateResponse, error) {
+	var res v1.UpdateResponse
+	if err := c.client.CallUnary(ctx, uiHostServiceUpdateSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *uiHostServiceClient) Sync(ctx context.Context, req *v1.SyncRequest) (*v1.SyncResponse, error) {
+	var res v1.SyncResponse
+	if err := c.client.CallUnary(ctx, uiHostServiceSyncSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -227,6 +311,30 @@ func (h uiHostServiceHandler) remove(ctx context.Context, _ connect.Spec, stream
 		return err
 	}
 	res, err := h.svc.Remove(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h uiHostServiceHandler) update(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Update(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h uiHostServiceHandler) sync(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SyncRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Sync(ctx, &req)
 	if err != nil {
 		return err
 	}

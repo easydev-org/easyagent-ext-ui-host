@@ -29,6 +29,28 @@ service UiHostService {
   // REFUSES THE SERVING VERSION. A delete that silently empties a live panel is indistinguishable, from
   // the console, from a bug in the panel. Activate another version (or the extension) first.
   rpc Remove(RemoveRequest) returns (RemoveResponse);
+
+  // Update resolves the newest release, installs it, and activates it — in one call.
+  //
+  // WHY THIS EXISTS ON TOP OF Install+Activate: those are two requests, and the second is easy to
+  // forget. The failure is silent and confusing — the panel is on disk, the download succeeded, and
+  // readers still see the old one (or nothing at all). This makes the pair atomic from a caller's
+  // point of view.
+  //
+  // IT IS STILL SAFE: if the newest version is ALREADY active, nothing is downloaded and nothing
+  // changes (`changed` is false). If the download fails, the active version is untouched, because
+  // Install writes to a new directory and Activate happens only after it succeeded.
+  rpc Update(UpdateRequest) returns (UpdateResponse);
+
+  // Sync updates every panel in a list, and reports per-entry results.
+  //
+  // THE LIST COMES FROM THE CALLER OR FROM THE SERVER'S OWN CONFIGURATION. A deployment that knows
+  // which panels it wants can call this with an empty request after a restart and be back to a known
+  // state; a one-off install can pass its own list.
+  //
+  // ONE FAILURE DOES NOT STOP THE OTHERS: each entry reports its own error, because a single
+  // unreachable release should not prevent the other two panels from updating.
+  rpc Sync(SyncRequest) returns (SyncResponse);
 }
 
 message InstallRequest {
@@ -107,6 +129,69 @@ message RemoveResponse {
   // What is serving afterwards — the same version when the removal was of an inactive one, a
   // different one if the caller asked for that, empty if nothing is.
   string active = 3;
+}
+
+message UpdateRequest {
+  // The extension this panel belongs to: "sandbox". It becomes the mount, /ext/sandbox/.
+  string ext_id = 1;
+  // The repository that publishes the panel, as owner/name. Empty means "whatever repo installed the
+  // active version" — which is what a caller that only knows an ext id can supply.
+  string repo = 2;
+  // The release asset to fetch. Defaults to "ui.tar.gz".
+  string asset = 3;
+  // When true, resolve the newest version and report it WITHOUT downloading or activating.
+  //
+  // WHAT THIS IS FOR: an operator or a cron job that wants to know "is there an update" without
+  // changing what readers see. The answer includes both versions, so the decision can be made on a
+  // value rather than on a second request.
+  bool dry_run = 4;
+}
+
+message UpdateResponse {
+  string ext_id = 1;
+  // The version that was serving before this call. Empty when nothing was.
+  string from = 2;
+  // The newest version the release feed reports.
+  string to = 3;
+  // True when this call changed what is serving. False for a dry run, and false when `to` was
+  // already active.
+  bool changed = 4;
+  // The downloaded archive's digest, so the NEXT update can pin it.
+  string sha256 = 5;
+  int32 files = 6;
+  int64 bytes = 7;
+  // The metadata the panel declared, read from the new version's ui.json.
+  PanelInfo info = 8;
+  // The repo the version came from, which is recorded per install and may have been inferred.
+  string repo = 9;
+}
+
+message SyncRequest {
+  // What to update. Empty means "the panels this host was configured with" (PANEL_REPOS).
+  repeated PanelRepo panels = 1;
+  // Passed to every Update. A dry run reports what WOULD change and downloads nothing.
+  bool dry_run = 2;
+}
+
+// PanelRepo names one panel to keep up to date.
+message PanelRepo {
+  string ext_id = 1;
+  string repo = 2;
+}
+
+message SyncResponse {
+  repeated SyncResult results = 1;
+}
+
+// SyncResult is one entry's outcome. An error is reported PER ENTRY rather than failing the call: a
+// single unreachable release must not stop the other panels from updating.
+message SyncResult {
+  string ext_id = 1;
+  string repo = 2;
+  // Present when the entry succeeded. Absent when it failed, which is itself the signal.
+  UpdateResponse update = 3;
+  // Empty on success. A human-readable reason otherwise.
+  string error = 4;
 }
 
 /**
