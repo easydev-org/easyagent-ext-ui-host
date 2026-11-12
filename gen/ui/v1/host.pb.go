@@ -669,7 +669,15 @@ type PanelInfo struct {
 	Descriptions map[string]string `protobuf:"bytes,2,rep,name=descriptions,proto3" json:"descriptions,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// A path WITHIN the panel, e.g. "/icon.svg". Empty means the shelf draws a neutral glyph rather
 	// than a broken image.
-	Icon          string `protobuf:"bytes,3,opt,name=icon,proto3" json:"icon,omitempty"`
+	Icon string `protobuf:"bytes,3,opt,name=icon,proto3" json:"icon,omitempty"`
+	// What this panel offers beyond its front page: extra pages, session-scoped side views, and any
+	// HTTP prefixes its backend owns.
+	//
+	// IT LIVES HERE, NOT IN THE EXTENSION'S BINARY, and that is the whole point of the field. The
+	// console reads it from the INSTALLED PANEL before a user has opened anything, so the entries can
+	// appear in the shelf and in a conversation's menu without the extension being contacted. A
+	// contribution declared by the Go backend would only be visible once somebody visited the panel.
+	Contributes   *Contributes `protobuf:"bytes,4,opt,name=contributes,proto3" json:"contributes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -725,6 +733,246 @@ func (x *PanelInfo) GetIcon() string {
 	return ""
 }
 
+func (x *PanelInfo) GetContributes() *Contributes {
+	if x != nil {
+		return x.Contributes
+	}
+	return nil
+}
+
+// Contributes is what a panel offers to the console.
+//
+// EVERYTHING DECLARED HERE IS RENDERED IN AN IFRAME. There is no scripting hook, no DOM injection
+// and no renderer replacement, by design: a panel is built and deployed separately from the console,
+// so the only safe shape is "the console owns the slot, the panel owns the pixels inside it".
+type Contributes struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Extra entries in the extension shelf, beyond the front page. The first is treated as home.
+	Pages []*Page `protobuf:"bytes,1,rep,name=pages,proto3" json:"pages,omitempty"`
+	// Views a conversation can open beside itself. This is what makes an extension reachable from a
+	// session's ⋯ menu rather than only from the global shelf.
+	SessionViews []*SessionView `protobuf:"bytes,2,rep,name=session_views,json=sessionViews,proto3" json:"session_views,omitempty"`
+	// HTTP prefixes this extension's own backend serves under its mount, besides "api".
+	//
+	// WITHOUT THIS THE HOST HAS TO KNOW THEM. It used to hard-code one (`desktop`, for the sandbox
+	// panel's WebSocket screen), which meant every extension that needed a proxy prefix required a
+	// console release. Declaring it here keeps the host generic.
+	Proxies       []string `protobuf:"bytes,3,rep,name=proxies,proto3" json:"proxies,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Contributes) Reset() {
+	*x = Contributes{}
+	mi := &file_ui_v1_host_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Contributes) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Contributes) ProtoMessage() {}
+
+func (x *Contributes) ProtoReflect() protoreflect.Message {
+	mi := &file_ui_v1_host_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Contributes.ProtoReflect.Descriptor instead.
+func (*Contributes) Descriptor() ([]byte, []int) {
+	return file_ui_v1_host_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *Contributes) GetPages() []*Page {
+	if x != nil {
+		return x.Pages
+	}
+	return nil
+}
+
+func (x *Contributes) GetSessionViews() []*SessionView {
+	if x != nil {
+		return x.SessionViews
+	}
+	return nil
+}
+
+func (x *Contributes) GetProxies() []string {
+	if x != nil {
+		return x.Proxies
+	}
+	return nil
+}
+
+// Page is one navigable screen the panel serves.
+type Page struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// A route WITHIN the panel, e.g. "/" or "/pulls". Opaque to the console, which only builds
+	// "#<route>" onto the mount.
+	Route string `protobuf:"bytes,1,opt,name=route,proto3" json:"route,omitempty"`
+	// The label the shelf shows. Falls back to the panel's title.
+	Title string `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	// Optional, keyed by language tag, like PanelInfo.descriptions.
+	Descriptions map[string]string `protobuf:"bytes,3,rep,name=descriptions,proto3" json:"descriptions,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Optional icon path under the mount. Empty means the shelf uses the panel's own icon.
+	Icon          string `protobuf:"bytes,4,opt,name=icon,proto3" json:"icon,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Page) Reset() {
+	*x = Page{}
+	mi := &file_ui_v1_host_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Page) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Page) ProtoMessage() {}
+
+func (x *Page) ProtoReflect() protoreflect.Message {
+	mi := &file_ui_v1_host_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Page.ProtoReflect.Descriptor instead.
+func (*Page) Descriptor() ([]byte, []int) {
+	return file_ui_v1_host_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *Page) GetRoute() string {
+	if x != nil {
+		return x.Route
+	}
+	return ""
+}
+
+func (x *Page) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *Page) GetDescriptions() map[string]string {
+	if x != nil {
+		return x.Descriptions
+	}
+	return nil
+}
+
+func (x *Page) GetIcon() string {
+	if x != nil {
+		return x.Icon
+	}
+	return ""
+}
+
+// SessionView is a view a conversation can open beside itself.
+type SessionView struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Stable identifier, used as the navigation key so reopening focuses rather than stacks.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// A route WITHIN the panel, e.g. "/side".
+	Route string `protobuf:"bytes,2,opt,name=route,proto3" json:"route,omitempty"`
+	// The header title the console shows before the panel reports its own.
+	Title string `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
+	// The entry in the conversation's ⋯ menu. Required: a session view with no label cannot be opened.
+	MenuLabel string `protobuf:"bytes,4,opt,name=menu_label,json=menuLabel,proto3" json:"menu_label,omitempty"`
+	// The namespace this view reads and writes its selection under, e.g. "sandbox".
+	//
+	// THE CONSOLE DOES NOT INTERPRET THE VALUE. It relays a namespace -> id map between the views that
+	// declare the same namespace, which is how a panel learns "which machine" without the console ever
+	// learning what a machine is. Empty means this view has no selection to share.
+	SelectionNamespace string `protobuf:"bytes,5,opt,name=selection_namespace,json=selectionNamespace,proto3" json:"selection_namespace,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *SessionView) Reset() {
+	*x = SessionView{}
+	mi := &file_ui_v1_host_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SessionView) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SessionView) ProtoMessage() {}
+
+func (x *SessionView) ProtoReflect() protoreflect.Message {
+	mi := &file_ui_v1_host_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SessionView.ProtoReflect.Descriptor instead.
+func (*SessionView) Descriptor() ([]byte, []int) {
+	return file_ui_v1_host_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *SessionView) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *SessionView) GetRoute() string {
+	if x != nil {
+		return x.Route
+	}
+	return ""
+}
+
+func (x *SessionView) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *SessionView) GetMenuLabel() string {
+	if x != nil {
+		return x.MenuLabel
+	}
+	return ""
+}
+
+func (x *SessionView) GetSelectionNamespace() string {
+	if x != nil {
+		return x.SelectionNamespace
+	}
+	return ""
+}
+
 var File_ui_v1_host_proto protoreflect.FileDescriptor
 
 const file_ui_v1_host_proto_rawDesc = "" +
@@ -772,14 +1020,34 @@ const file_ui_v1_host_proto_rawDesc = "" +
 	"\x0eRemoveResponse\x12\x15\n" +
 	"\x06ext_id\x18\x01 \x01(\tR\x05extId\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12\x16\n" +
-	"\x06active\x18\x03 \x01(\tR\x06active\"\xbe\x01\n" +
+	"\x06active\x18\x03 \x01(\tR\x06active\"\xf4\x01\n" +
 	"\tPanelInfo\x12\x14\n" +
 	"\x05title\x18\x01 \x01(\tR\x05title\x12F\n" +
 	"\fdescriptions\x18\x02 \x03(\v2\".ui.v1.PanelInfo.DescriptionsEntryR\fdescriptions\x12\x12\n" +
-	"\x04icon\x18\x03 \x01(\tR\x04icon\x1a?\n" +
+	"\x04icon\x18\x03 \x01(\tR\x04icon\x124\n" +
+	"\vcontributes\x18\x04 \x01(\v2\x12.ui.v1.ContributesR\vcontributes\x1a?\n" +
 	"\x11DescriptionsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x012\xee\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x83\x01\n" +
+	"\vContributes\x12!\n" +
+	"\x05pages\x18\x01 \x03(\v2\v.ui.v1.PageR\x05pages\x127\n" +
+	"\rsession_views\x18\x02 \x03(\v2\x12.ui.v1.SessionViewR\fsessionViews\x12\x18\n" +
+	"\aproxies\x18\x03 \x03(\tR\aproxies\"\xca\x01\n" +
+	"\x04Page\x12\x14\n" +
+	"\x05route\x18\x01 \x01(\tR\x05route\x12\x14\n" +
+	"\x05title\x18\x02 \x01(\tR\x05title\x12A\n" +
+	"\fdescriptions\x18\x03 \x03(\v2\x1d.ui.v1.Page.DescriptionsEntryR\fdescriptions\x12\x12\n" +
+	"\x04icon\x18\x04 \x01(\tR\x04icon\x1a?\n" +
+	"\x11DescriptionsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x99\x01\n" +
+	"\vSessionView\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
+	"\x05route\x18\x02 \x01(\tR\x05route\x12\x14\n" +
+	"\x05title\x18\x03 \x01(\tR\x05title\x12\x1d\n" +
+	"\n" +
+	"menu_label\x18\x04 \x01(\tR\tmenuLabel\x12/\n" +
+	"\x13selection_namespace\x18\x05 \x01(\tR\x12selectionNamespace2\xee\x01\n" +
 	"\rUiHostService\x128\n" +
 	"\aInstall\x12\x15.ui.v1.InstallRequest\x1a\x16.ui.v1.InstallResponse\x12/\n" +
 	"\x04List\x12\x12.ui.v1.ListRequest\x1a\x13.ui.v1.ListResponse\x12;\n" +
@@ -798,7 +1066,7 @@ func file_ui_v1_host_proto_rawDescGZIP() []byte {
 	return file_ui_v1_host_proto_rawDescData
 }
 
-var file_ui_v1_host_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_ui_v1_host_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_ui_v1_host_proto_goTypes = []any{
 	(*InstallRequest)(nil),   // 0: ui.v1.InstallRequest
 	(*InstallResponse)(nil),  // 1: ui.v1.InstallResponse
@@ -811,27 +1079,35 @@ var file_ui_v1_host_proto_goTypes = []any{
 	(*RemoveRequest)(nil),    // 8: ui.v1.RemoveRequest
 	(*RemoveResponse)(nil),   // 9: ui.v1.RemoveResponse
 	(*PanelInfo)(nil),        // 10: ui.v1.PanelInfo
-	nil,                      // 11: ui.v1.PanelInfo.DescriptionsEntry
+	(*Contributes)(nil),      // 11: ui.v1.Contributes
+	(*Page)(nil),             // 12: ui.v1.Page
+	(*SessionView)(nil),      // 13: ui.v1.SessionView
+	nil,                      // 14: ui.v1.PanelInfo.DescriptionsEntry
+	nil,                      // 15: ui.v1.Page.DescriptionsEntry
 }
 var file_ui_v1_host_proto_depIdxs = []int32{
 	10, // 0: ui.v1.InstallResponse.info:type_name -> ui.v1.PanelInfo
 	4,  // 1: ui.v1.ListResponse.extensions:type_name -> ui.v1.ExtState
 	5,  // 2: ui.v1.ExtState.versions:type_name -> ui.v1.InstalledVersion
 	10, // 3: ui.v1.ExtState.info:type_name -> ui.v1.PanelInfo
-	11, // 4: ui.v1.PanelInfo.descriptions:type_name -> ui.v1.PanelInfo.DescriptionsEntry
-	0,  // 5: ui.v1.UiHostService.Install:input_type -> ui.v1.InstallRequest
-	2,  // 6: ui.v1.UiHostService.List:input_type -> ui.v1.ListRequest
-	6,  // 7: ui.v1.UiHostService.Activate:input_type -> ui.v1.ActivateRequest
-	8,  // 8: ui.v1.UiHostService.Remove:input_type -> ui.v1.RemoveRequest
-	1,  // 9: ui.v1.UiHostService.Install:output_type -> ui.v1.InstallResponse
-	3,  // 10: ui.v1.UiHostService.List:output_type -> ui.v1.ListResponse
-	7,  // 11: ui.v1.UiHostService.Activate:output_type -> ui.v1.ActivateResponse
-	9,  // 12: ui.v1.UiHostService.Remove:output_type -> ui.v1.RemoveResponse
-	9,  // [9:13] is the sub-list for method output_type
-	5,  // [5:9] is the sub-list for method input_type
-	5,  // [5:5] is the sub-list for extension type_name
-	5,  // [5:5] is the sub-list for extension extendee
-	0,  // [0:5] is the sub-list for field type_name
+	14, // 4: ui.v1.PanelInfo.descriptions:type_name -> ui.v1.PanelInfo.DescriptionsEntry
+	11, // 5: ui.v1.PanelInfo.contributes:type_name -> ui.v1.Contributes
+	12, // 6: ui.v1.Contributes.pages:type_name -> ui.v1.Page
+	13, // 7: ui.v1.Contributes.session_views:type_name -> ui.v1.SessionView
+	15, // 8: ui.v1.Page.descriptions:type_name -> ui.v1.Page.DescriptionsEntry
+	0,  // 9: ui.v1.UiHostService.Install:input_type -> ui.v1.InstallRequest
+	2,  // 10: ui.v1.UiHostService.List:input_type -> ui.v1.ListRequest
+	6,  // 11: ui.v1.UiHostService.Activate:input_type -> ui.v1.ActivateRequest
+	8,  // 12: ui.v1.UiHostService.Remove:input_type -> ui.v1.RemoveRequest
+	1,  // 13: ui.v1.UiHostService.Install:output_type -> ui.v1.InstallResponse
+	3,  // 14: ui.v1.UiHostService.List:output_type -> ui.v1.ListResponse
+	7,  // 15: ui.v1.UiHostService.Activate:output_type -> ui.v1.ActivateResponse
+	9,  // 16: ui.v1.UiHostService.Remove:output_type -> ui.v1.RemoveResponse
+	13, // [13:17] is the sub-list for method output_type
+	9,  // [9:13] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_ui_v1_host_proto_init() }
@@ -845,7 +1121,7 @@ func file_ui_v1_host_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_ui_v1_host_proto_rawDesc), len(file_ui_v1_host_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

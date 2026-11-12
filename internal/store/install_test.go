@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -170,5 +171,60 @@ func TestInstallRefusesAnInvalidExtensionID(t *testing.T) {
 	_, _, err := in.Install(context.Background(), "../etc", "x/y", "latest", "", "")
 	if err == nil {
 		t.Fatal("an invalid id must be refused")
+	}
+}
+
+/**
+ * Proxies reads the panel's declared backend prefixes.
+ *
+ * THE VALIDATION IS THE INTERESTING PART. These names go straight into a route, so a declaration of
+ * "../x" or "a/b" would produce a path the author did not intend — and the first is a traversal shape.
+ * Dropping a bad name is better than refusing the panel: the consequence is a route that falls back
+ * to the panel, which its own author can see and fix.
+ */
+func TestProxiesReadsTheDeclaration(t *testing.T) {
+	st := &Store{Root: t.TempDir()}
+	ver := "v1.0.0"
+	dir := filepath.Join(st.VersionDir("sandbox", ver), "dist")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := `{"title":"S","contributes":{"proxies":["desktop","ok-name","../evil","a/b","",".",".."]}}`
+	if err := os.WriteFile(filepath.Join(dir, InfoFile), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Activate("sandbox", ver); err != nil {
+		t.Fatal(err)
+	}
+
+	got := st.Proxies("sandbox")
+	want := []string{"desktop", "ok-name"}
+	if len(got) != len(want) {
+		t.Fatalf("want %v, got %v", want, got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("want %v, got %v", want, got)
+		}
+	}
+}
+
+func TestProxiesIsEmptyWithoutADeclaration(t *testing.T) {
+	st := &Store{Root: t.TempDir()}
+	ver := "v1.0.0"
+	dir := filepath.Join(st.VersionDir("gitdev", ver), "dist")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, InfoFile), []byte(`{"title":"G"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Activate("gitdev", ver); err != nil {
+		t.Fatal(err)
+	}
+	// THE OLD BEHAVIOUR FOR EVERY OTHER EXTENSION: nothing is forwarded, everything falls back to the
+	// panel. This is what makes the hard-coded `desktop` removal safe.
+	if got := st.Proxies("gitdev"); len(got) != 0 {
+		t.Fatalf("want no proxies, got %v", got)
 	}
 }

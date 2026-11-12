@@ -139,21 +139,18 @@ func TestPanelsWithoutAnInstallSaySo(t *testing.T) {
  *
  * The failure is invisible without this test: everything answers 200 either way.
  */
-func TestDesktopIsForwardedNotServedAsThePanel(t *testing.T) {
-	// A stand-in extension that marks anything it receives, so "did the request leave this process" is
-	// a question with one answer.
-	ext := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("EXTENSION-SAW:" + r.URL.Path))
-	}))
-	defer ext.Close()
-
-	// THE SUFFIX IS THE TEST SERVER'S HOST, so <id>-ext.<suffix> resolves to it for any id.
+func TestDeclaredProxiesAreForwardedNotServedAsThePanel(t *testing.T) {
+	// THE SUFFIX DOES NOT RESOLVE, so every forwarded request ends as a 502. That is enough to prove
+	// the request LEFT this process, which is the bug this route exists for: without it the iframe
+	// loaded the panel's own index.html inside itself — a page that renders, looks plausible, and
+	// shows no screen.
+	//
+	// A reachable stand-in cannot be used here because the proxy host is built as
+	// "<id>-ext<ExtSuffix>:8080", so the suffix has to be a DNS suffix rather than a host:port.
 	std := &store.Store{Root: t.TempDir()}
+	installPanel(t, std, "sandbox", `{"title":"Sandboxes","contributes":{"proxies":["desktop"]}}`)
 	panels := &Panels{Store: std}
-	app := &App{
-		Dir:       consoleFixture(t),
-		ExtSuffix: "." + ext.Listener.Addr().String(),
-	}
+	app := &App{Dir: consoleFixture(t), ExtSuffix: ".test.invalid"}
 	mux := http.NewServeMux()
 	app.Mount(mux, panels)
 
@@ -165,12 +162,64 @@ func TestDesktopIsForwardedNotServedAsThePanel(t *testing.T) {
 	} {
 		w := do(mux, http.MethodGet, p)
 		body := w.Body.String()
+		// NOT THE PANEL, AND NOT THE CONSOLE. Both are HTML documents, and both are what a reader got
+		// instead of a screen before this route existed.
+		if strings.Contains(body, "PANEL") {
+			t.Fatalf("%s was answered by the panel's own bundle instead of being forwarded", p)
+		}
 		if strings.Contains(body, "CONSOLE") {
 			t.Fatalf("%s fell through to the console", p)
 		}
-		// The panel's own page is what a reader saw instead of a screen; assert it is not that either.
-		if strings.Contains(body, "<html") {
-			t.Fatalf("%s was answered with an HTML page rather than forwarded", p)
+		// A 502 IS THE PROOF. A panel 404 would also be neither of the above, so without this the
+		// assertion passes while nothing is being forwarded at all — which is how the previous
+		// version of this test kept passing after the hard-coded prefix was removed.
+		if w.Code != http.StatusBadGateway {
+			t.Fatalf("%s: want 502 from the proxy, got %d %q", p, w.Code, body)
 		}
+	}
+}
+
+/**
+ * A panel that does NOT declare a prefix must not have one forwarded.
+ *
+ * THE OTHER HALF OF THE RULE. The router used to hard-code `desktop`, so every extension got that
+ * route whether or not it had a backend for it. Now the list is the panel's, and an undeclared prefix
+ * has to fall back to the panel — otherwise the declaration would mean nothing.
+ */
+func TestUndeclaredPrefixIsNotForwarded(t *testing.T) {
+	ext := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("EXTENSION-SAW:" + r.URL.Path))
+	}))
+	defer ext.Close()
+
+	std := &store.Store{Root: t.TempDir()}
+	installPanel(t, std, "gitdev", `{"title":"Git"}`)
+	panels := &Panels{Store: std}
+	app := &App{Dir: consoleFixture(t), ExtSuffix: "." + ext.Listener.Addr().String()}
+	mux := http.NewServeMux()
+	app.Mount(mux, panels)
+
+	w := do(mux, http.MethodGet, "/ext/gitdev/desktop")
+	if strings.Contains(w.Body.String(), "EXTENSION-SAW") {
+		t.Fatal("a prefix the panel never declared was forwarded to the extension")
+	}
+}
+
+// installPanel writes a panel version to disk and activates it, which is the state the router reads.
+func installPanel(t *testing.T, st *store.Store, extID, uiJSON string) {
+	t.Helper()
+	ver := "v1.0.0"
+	dir := filepath.Join(st.VersionDir(extID, ver), "dist")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<!doctype html><html>PANEL</html>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, store.InfoFile), []byte(uiJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Activate(extID, ver); err != nil {
+		t.Fatal(err)
 	}
 }

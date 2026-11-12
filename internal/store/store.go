@@ -251,3 +251,62 @@ func (s *Store) ReadInfo(extID, version string) (map[string]any, error) {
 	}
 	return out, nil
 }
+
+/**
+ * Proxies reports the extra HTTP prefixes the ACTIVE panel's backend serves.
+ *
+ * WHY THE HOST ASKS RATHER THAN KNOWING: this used to be a hard-coded list in the router (`desktop`,
+ * for the sandbox panel's live screen), so a second extension that needed a WebSocket prefix meant a
+ * console release. The panel declares them in its own `ui.json`, and this is how the router learns
+ * them.
+ *
+ * AN EMPTY OR BROKEN DECLARATION YIELDS FEWER PREFIXES, NEVER AN ERROR. The consequence of a missing
+ * prefix is that requests fall through to the panel's SPA — visible, and fixable by the extension's
+ * author. A router that failed to start because one panel's metadata was malformed would take every
+ * other panel down with it.
+ *
+ * NAMES ARE VALIDATED as single path segments: a declaration like "a/b" or "../x" would otherwise
+ * turn into a route the author did not intend, and `..` in a proxy prefix is a path-traversal shape.
+ */
+func (s *Store) Proxies(extID string) []string {
+	active := s.Active(extID)
+	if active == "" {
+		return nil
+	}
+	info, err := s.ReadInfo(extID, active)
+	if err != nil {
+		return nil
+	}
+	raw, ok := info["contributes"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	list, ok := raw["proxies"].([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(list))
+	for _, v := range list {
+		name, ok := v.(string)
+		if !ok || !validSegment(name) {
+			continue
+		}
+		out = append(out, name)
+	}
+	return out
+}
+
+// validSegment reports whether s is a single, safe path segment.
+func validSegment(s string) bool {
+	if s == "" || s == "." || s == ".." || len(s) > 64 {
+		return false
+	}
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-', r == '_':
+		default:
+			return false
+		}
+	}
+	return true
+}

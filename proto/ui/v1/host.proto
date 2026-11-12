@@ -124,4 +124,62 @@ message PanelInfo {
   // A path WITHIN the panel, e.g. "/icon.svg". Empty means the shelf draws a neutral glyph rather
   // than a broken image.
   string icon = 3;
+  // What this panel offers beyond its front page: extra pages, session-scoped side views, and any
+  // HTTP prefixes its backend owns.
+  //
+  // IT LIVES HERE, NOT IN THE EXTENSION'S BINARY, and that is the whole point of the field. The
+  // console reads it from the INSTALLED PANEL before a user has opened anything, so the entries can
+  // appear in the shelf and in a conversation's menu without the extension being contacted. A
+  // contribution declared by the Go backend would only be visible once somebody visited the panel.
+  Contributes contributes = 4;
+}
+
+// Contributes is what a panel offers to the console.
+//
+// EVERYTHING DECLARED HERE IS RENDERED IN AN IFRAME. There is no scripting hook, no DOM injection
+// and no renderer replacement, by design: a panel is built and deployed separately from the console,
+// so the only safe shape is "the console owns the slot, the panel owns the pixels inside it".
+message Contributes {
+  // Extra entries in the extension shelf, beyond the front page. The first is treated as home.
+  repeated Page pages = 1;
+  // Views a conversation can open beside itself. This is what makes an extension reachable from a
+  // session's ⋯ menu rather than only from the global shelf.
+  repeated SessionView session_views = 2;
+  // HTTP prefixes this extension's own backend serves under its mount, besides "api".
+  //
+  // WITHOUT THIS THE HOST HAS TO KNOW THEM. It used to hard-code one (`desktop`, for the sandbox
+  // panel's WebSocket screen), which meant every extension that needed a proxy prefix required a
+  // console release. Declaring it here keeps the host generic.
+  repeated string proxies = 3;
+}
+
+// Page is one navigable screen the panel serves.
+message Page {
+  // A route WITHIN the panel, e.g. "/" or "/pulls". Opaque to the console, which only builds
+  // "#<route>" onto the mount.
+  string route = 1;
+  // The label the shelf shows. Falls back to the panel's title.
+  string title = 2;
+  // Optional, keyed by language tag, like PanelInfo.descriptions.
+  map<string, string> descriptions = 3;
+  // Optional icon path under the mount. Empty means the shelf uses the panel's own icon.
+  string icon = 4;
+}
+
+// SessionView is a view a conversation can open beside itself.
+message SessionView {
+  // Stable identifier, used as the navigation key so reopening focuses rather than stacks.
+  string id = 1;
+  // A route WITHIN the panel, e.g. "/side".
+  string route = 2;
+  // The header title the console shows before the panel reports its own.
+  string title = 3;
+  // The entry in the conversation's ⋯ menu. Required: a session view with no label cannot be opened.
+  string menu_label = 4;
+  // The namespace this view reads and writes its selection under, e.g. "sandbox".
+  //
+  // THE CONSOLE DOES NOT INTERPRET THE VALUE. It relays a namespace -> id map between the views that
+  // declare the same namespace, which is how a panel learns "which machine" without the console ever
+  // learning what a machine is. Empty means this view has no selection to share.
+  string selection_namespace = 5;
 }

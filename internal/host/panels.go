@@ -102,6 +102,21 @@ func (p *Panels) serveInfo(w http.ResponseWriter, extID string) {
 	if v, ok := info["icon"].(string); ok && v != "" {
 		body["icon"] = v
 	}
+	// THE CONTRIBUTIONS, AS THE PANEL DECLARED THEM.
+	//
+	// PASSED THROUGH VERBATIM rather than typed here, because this service is not the authority on
+	// what a contribution means — the console is. Re-encoding into the protobuf shape would mean a
+	// field added to `ui.json` needs a change HERE before the console can see it, which is the
+	// coupling this whole indirection exists to avoid.
+	//
+	// MALFORMED IS DROPPED, NOT FORWARDED. The console validates again, but a contribution that
+	// arrives as a string where an object belongs would make it log a parse failure on every panel
+	// probe rather than once at install.
+	if v, ok := info["contributes"]; ok {
+		if c, ok := v.(map[string]any); ok && len(c) > 0 {
+			body["contributes"] = c
+		}
+	}
 	w.Header().Set("Content-Type", "application/json")
 	// NOT CACHED: the answer changes when a version is activated, and a console that cached it would
 	// keep opening a version that is no longer serving.

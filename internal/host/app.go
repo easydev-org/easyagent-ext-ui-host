@@ -85,21 +85,31 @@ func (a *App) Mount(mux *http.ServeMux, panels *Panels) {
 			panels.Serve(w, r)
 			return
 		}
-		// A SECOND PREFIX THE EXTENSION OWNS: the live screen.
+		// What this panel's backend serves besides api/, read from its ui.json on every request.
 		//
-		// `/ext/<id>/desktop/...` is a WebSocket-carrying proxy the extension serves — the easystream
-		// UI, for the sandboxes that have one. Without this line it fell into the panel's SPA fallback,
-		// so the iframe loaded THE PANEL'S OWN index.html inside itself: a page that renders, looks
-		// plausible, and shows no screen. The signed URL in it was never even read.
+		// ON EVERY REQUEST rather than cached at install: activating a new version changes the
+		// declaration, and a cache would keep forwarding the old extension's prefixes to the new one.
+		// It is one small file read on a path the browser already round-trips.
+		var proxies []string
+		if err := store.ValidID(extID); err == nil && panels.Store != nil {
+			proxies = panels.Store.Proxies(extID)
+		}
+		// THE PREFIXES THE EXTENSION'S OWN BACKEND OWNS, DECLARED BY THE PANEL.
 		//
-		// The prefix is the extension's to know, which is why it is named here rather than guessed:
-		// a rule that forwarded "everything that is not api/" would send the panel's own routes to
-		// a backend that has no idea what they are.
-		// `tail == "desktop"` as well as the subtree: the first request a browser makes for a screen is
-		// the bare path, and a rule that only matched `desktop/` would hand that one request to the
-		// panel and the rest to the extension.
-		if !strings.HasPrefix(tail, "api/") &&
-			tail != "desktop" && !strings.HasPrefix(tail, "desktop/") {
+		// `/ext/<id>/desktop/...` is a WebSocket-carrying proxy the sandbox extension serves — the
+		// easystream UI. Without forwarding it, the request fell into the panel's SPA fallback, so the
+		// iframe loaded THE PANEL'S OWN index.html inside itself: a page that renders, looks plausible,
+		// and shows no screen. The signed URL in it was never even read.
+		//
+		// THIS USED TO BE A HARD-CODED LIST. One extension needing a prefix meant a console release,
+		// and the comment explaining it had to be re-read by whoever added the next one. Now each
+		// panel declares its prefixes in its own ui.json (`contributes.proxies`), and this router only
+		// consults that declaration — so the host stays generic and an extension ships its own route.
+		//
+		// THE PANEL'S OWN ROUTES ARE STILL THE PANEL'S: a rule that forwarded "everything that is not
+		// api/" would send the panel's SPA routes to a backend that has no idea what they are. Hence a
+		// declared list rather than a catch-all.
+		if !strings.HasPrefix(tail, "api/") && !isProxied(tail, proxies) {
 			panels.Serve(w, r)
 			return
 		}
@@ -198,4 +208,20 @@ func FindConsole(dataDir string) string {
 		return p
 	}
 	return ""
+}
+
+/**
+ * isProxied reports whether tail belongs to a prefix the panel declared as its backend's.
+ *
+ * THE BARE PREFIX COUNTS as well as the subtree: the first request a browser makes for a live screen
+ * is the bare path, and a rule that only matched `desktop/` would hand that one request to the panel
+ * and every later one to the extension — a screen that never connects, with no error anywhere.
+ */
+func isProxied(tail string, prefixes []string) bool {
+	for _, p := range prefixes {
+		if tail == p || strings.HasPrefix(tail, p+"/") {
+			return true
+		}
+	}
+	return false
 }
